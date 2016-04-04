@@ -1,1394 +1,925 @@
 <?php
-/*
-* 2007-2015 PrestaShop
+/**
+* 2015 HiPay
 *
 * NOTICE OF LICENSE
 *
-* This source file is subject to the Academic Free License (AFL 3.0)
-* that is bundled with this package in the file LICENSE.txt.
-* It is also available through the world-wide-web at this URL:
-* http://opensource.org/licenses/afl-3.0.php
-* If you did not receive a copy of the license and are unable to
-* obtain it through the world-wide-web, please send an email
-* to license@prestashop.com so we can send you a copy immediately.
 *
-* DISCLAIMER
-*
-* Do not edit or add to this file if you wish to upgrade PrestaShop to newer
-* versions in the future. If you wish to customize PrestaShop for your
-* needs please refer to http://www.prestashop.com for more information.
-*
-*  @author PrestaShop SA <contact@prestashop.com>
-*  @copyright  2007-2011 PrestaShop SA
-*  @license    http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
-*  International Registered Trademark & Property of PrestaShop SA
-*
-*  SUPPORT HIPAY <support@hipay.com> 
-* 	http://www.hipay.com
-*
-*  Bugfix sur la v1.6.9 (JPN): 
-*	- Erreur 500 sur la validation de commande
-* 	- Création d'un nouveau statut de commande "En attente de paiement HiPay"
-* 	- Gestion du callback authorization - waiting
-* 	- Transfert du logo de la boutique vers la page de paiement (seulement si le site est en HTTPS)
-* 	- Compatible Multiboutique
-*   - Supression d'appels de fonctions inutiles sur la validation
+* @author    HiPay <support.wallet@hipay.com>
+* @copyright 2015 HiPay
+* @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 */
-
+use PrestaShop\PrestaShop\Core\Payment\PaymentOption;
 if (!defined('_PS_VERSION_'))
-	exit;
+    exit;
 
-define('DEV', 0);
-define('PROD', 1);
-define('HIPAY_LOG', 0);
+require_once(dirname(__FILE__).'/classes/forms/HipayForm.php');
+require_once(dirname(__FILE__).'/classes/webservice/HipayUserAccount.php');
+require_once(dirname(__FILE__).'/classes/webservice/HipayWS.php');
 
 class Hipay extends PaymentModule
 {
-	private $arrayCategories;
-	private $env = PROD;
+    protected $config_form = false;
 
-	protected $ws_client = false;
+    public $_errors = [];
+    protected $_successes = [];
+    protected $_warnings = [];
 
-	const WS_SERVER = 'http://api.prestashop.com/';
-	const WS_URL = 'http://api.prestashop.com/partner/hipay/hipay.php';
+    public $currencies_titles = [];
+    public $limited_countries = [];
+    public $limited_currencies = [];
 
-	public function __construct()
-	{
-		$this->name = 'hipay';
-		$this->tab = 'payments_gateways';
-		$this->version = '1.6.13';
-		$this->module_key = 'ab188f639335535838c7ee492a2e89f8';
-		$this->is_eu_compatible = 1;
+    public $configHipay;
 
-		$this->currencies = true;
-		$this->currencies_mode = 'radio';
-		$this->author = 'PrestaShop';
+    const PAYMENT_FEED_BASE_LINK = 'https://www.prestashop.com/download/pdf/pspayments/Fees_PSpayments_';
 
-		parent::__construct();
+    public static $available_rates_links = [
+        'EN', 'FR', 'ES', 'DE',
+        'IT', 'NL', 'PL', 'PT'
+    ];
 
-		$this->displayName = 'HiPay';
-		$this->description = $this->l('Secure payement with Visa, Mastercard and European solutions.');
+    public static $refund_available = ['CB', 'VISA', 'MASTERCARD'];
 
-		$request = '
-			SELECT iso_code
-			FROM '._DB_PREFIX_.'country as c
-			LEFT JOIN '._DB_PREFIX_.'zone as z
-			ON z.id_zone = c.id_zone
-			WHERE ';
-
-		$result = Db::getInstance()->ExecuteS($request.$this->getRequestZones());
-
-		foreach ($result as $num => $iso)
-			$this->limited_countries[] = $iso['iso_code'];
-
-		if ($this->id)
-		{
-			// Define extracted from mapi/mapi_defs.php
-			if (!defined('HIPAY_GATEWAY_URL'))
-				define('HIPAY_GATEWAY_URL','https://'.($this->env ? '' : 'test.').'payment.hipay.com/order/');
-		}
-
-		/** Backward compatibility */
-		require(_PS_MODULE_DIR_.'hipay/backward_compatibility/backward.php');
-
-		if (!class_exists('SoapClient'))
-			$this->warning .= $this->l('To work properly the module need the Soap library to be installed.');
-		else
-			$this->ws_client = $this->getWsClient();
-	}
-
-	public function install()
-	{
-		Configuration::updateValue('HIPAY_SALT', uniqid());
-
-		if (!Configuration::get('HIPAY_UNIQID'))
-			Configuration::updateValue('HIPAY_UNIQID', uniqid());
-		if (!Configuration::get('HIPAY_RATING'))
-			Configuration::updateValue('HIPAY_RATING', 'ALL');
-
-		if (!(parent::install() && $this->registerHook('payment') && $this->registerHook('displayPaymentEU') && $this->registerHook('paymentReturn') && $this->_createAuthorizationOrderState()))
-			return false;
-
-		$result = Db::getInstance()->ExecuteS('
-			SELECT `id_zone`, `name`
-			FROM `'._DB_PREFIX_.'zone`
-			WHERE `active` = 1
-		');
-
-		foreach ($result as $rowNumber => $rowValues)
-		{
-			Configuration::deleteByName('HIPAY_AZ_'.$rowValues['id_zone']);
-			Configuration::deleteByName('HIPAY_AZ_ALL_'.$rowValues['id_zone']);
-		}
-		Db::getInstance()->Execute('DELETE FROM `'._DB_PREFIX_.'module_country` WHERE `id_module` = '.(int)$this->id);
-
-		return true;
-	}
-
-	private function _createAuthorizationOrderState()
-	{
-		if (!Configuration::get('HIPAY_AUTHORIZATION_OS'))
-		{
-			$os = new OrderState();
-			$os->name = array();
-			foreach (Language::getLanguages(false) as $language)
-				if (Tools::strtolower($language['iso_code']) == 'fr')
-					$os->name[(int)$language['id_lang']] = 'Autorisation acceptée par HiPay';
-				else
-					$os->name[(int)$language['id_lang']] = 'Authorization accepted by HiPay';
-			$os->color = '#4169E1';
-			$os->hidden = false;
-			$os->send_email = false;
-			$os->delivery = false;
-			$os->logable = false;
-			$os->invoice = false;
-			if ($os->add())
-			{
-				Configuration::updateValue('HIPAY_AUTHORIZATION_OS', $os->id);
-				copy(dirname(__FILE__).'/logo.gif', dirname(__FILE__).'/../../img/os/'.(int)$os->id.'.gif');
-			}
-			else
-				return false;
-		}
-		if (!Configuration::get('HIPAY_WAITINGPAYMENT_OS'))
-		{
-			$os = new OrderState();
-			$os->name = array();
-			foreach (Language::getLanguages(false) as $language)
-				if (Tools::strtolower($language['iso_code']) == 'fr')
-					$os->name[(int)$language['id_lang']] = 'En attente de paiement HiPay';
-				else
-					$os->name[(int)$language['id_lang']] = 'Pending payment HiPay';
-			$os->color = '#FAAC58';
-			$os->hidden = false;
-			$os->send_email = false;
-			$os->delivery = false;
-			$os->logable = false;
-			$os->invoice = false;
-			if ($os->add())
-			{
-				Configuration::updateValue('HIPAY_WAITINGPAYMENT_OS', $os->id);
-				copy(dirname(__FILE__).'/logo.gif', dirname(__FILE__).'/../../img/os/'.(int)$os->id.'.gif');
-			}
-			else{
-				// trasnlate - Erreur sur la mise à jour du statut de commande - En attente de paiement HiPay.
-				$object->upgrade_detail[$this->version][] = $this->l('Error on the order status update - Pending Payment HiPay.');
-				return false;
-			}
-		}
-		if (!Configuration::get('HIPAY_VERSION'))
-		{
-			Configuration::updateValue('HIPAY_VERSION', $this->version);
-		}
-		return true;
-	}
-	/**
-	 * Set shipping zone search
-	 *
-	 * @param	string $searchField = 'z.id_zone'
-	 * @param	int $defaultZone = 1
-	 * @return	string
-	 */
-	private function getRequestZones($searchField='z.id_zone', $defaultZone = 1)
-	{
-		$result = Db::getInstance()->ExecuteS('
-			SELECT `id_zone`, `name`
-			FROM `'._DB_PREFIX_.'zone`
-			WHERE `active` = 1
-		');
-
-		$tmp = null;
-		foreach ($result as $rowNumber => $rowValues)
-			if (strcmp(Configuration::get('HIPAY_AZ_'.$rowValues['id_zone']), 'ok') == 0)
-				$tmp .= $searchField.' = '.$rowValues['id_zone'].' OR ';
-
-		if ($tmp == null)
-			$tmp = $searchField.' = '.$defaultZone;
-		else
-			$tmp = substr($tmp, 0, strlen($tmp) - strlen(' OR '));
-
-		return $tmp;
-	}
-
-	public function hookPaymentReturn()
-	{
-		if (!$this->active)
-			return null;
-		return $this->display(__FILE__, (version_compare(_PS_VERSION_, '1.5.0.0', '<') ? '/views/templates/hook/' : '') . 'confirmation.tpl');
-	}
-
-    public function isPaymentPossible()
+    public function __construct()
     {
-        $currency = new Currency($this->getModuleCurrency($this->context->cart));
-        $hipayAccount = Configuration::get('HIPAY_ACCOUNT_'.$currency->iso_code);
-        $hipayPassword = Configuration::get('HIPAY_PASSWORD_'.$currency->iso_code);
-        $hipaySiteId = Configuration::get('HIPAY_SITEID_'.$currency->iso_code);
-        $hipayCategory = Configuration::get('HIPAY_CATEGORY_'.$currency->iso_code);
+        $this->name = 'hipay';
+        $this->tab = 'payments_gateways';
+        $this->version = '2.0.0';
+        $this->module_key = 'ab188f639335535838c7ee492a2e89f8';
 
-        # Restructuration du return par Johan PROTIN (jprotin at hipay dot com)
-        return array(
-        	$hipayAccount,
-        	$hipayPassword,
-        	$hipaySiteId,
-        	$hipayCategory,
-        	Configuration::get('HIPAY_RATING'),
-        	$this->context->cart->getOrderTotal() >= 2
-        );
+        $this->currencies = true;
+        $this->currencies_mode = 'checkbox';
+        $this->controllers = array('validation');
+        $this->author = 'HiPay';
+
+        $this->bootstrap = true;
+        $this->display = 'view';
+
+        parent::__construct();
+
+        $this->displayName = $this->l('Payments 2.0 by HiPay');
+        $this->description = $this->l('Accept payments by credit card and other local methods with HiPay payment solution. Very competitive rates, no configuration required!');
+
+        // Compliancy
+        $this->limited_countries = [
+            'AT', 'BE', 'CH', 'CY', 'CZ', 'DE', 'DK',
+            'EE', 'ES', 'FI', 'FR', 'GB', 'GR', 'HK',
+            'HR', 'HU', 'IE', 'IT', 'LI', 'LT', 'LU',
+            'LV', 'MC', 'MT', 'NL', 'NO', 'PL', 'PT',
+            'RO', 'RU', 'SE', 'SI', 'SK', 'TR'
+        ];
+
+        $this->currencies_titles = [
+            'AUD' => $this->l('Australian dollar'),
+            'CAD' => $this->l('Canadian dollar'),
+            'CHF' => $this->l('Swiss franc'),
+            'EUR' => $this->l('Euro'),
+            'GBP' => $this->l('Pound sterling'),
+            'PLN' => $this->l('Polish złoty'),
+            'SEK' => $this->l('Swedish krona'),
+            'USD' => $this->l('United States dollar'),
+        ];
+
+        $this->limited_currencies = array_keys($this->currencies_titles);
+
+        $this->ps_versions_compliancy = ['min' => '1.6', 'max' => _PS_VERSION_];
+
+        if (!Configuration::get('HIPAY_CONFIG')) {
+            $this->warning = $this->l('Please, do not forget to configure your module');
+        } else {
+        	$this->configHipay = $this->getConfigHiPay();
+        }
     }
 
-	public function hookPayment($params)
-	{
-		global $smarty, $cart;
+    public function install()
+    {
+        if (extension_loaded('soap') == false) {
+            $this->_errors[] = $this->l('You have to enable the SOAP extension on your server to install this module');
+            return false;
+        }
 
-		$logo_suffix = strtoupper(Configuration::get('HIPAY_PAYMENT_BUTTON'));
-		if (!in_array($logo_suffix, array('DE', 'FR', 'GB', 'BE', 'ES', 'IT', 'NL', 'PT', 'BR')))
-			$logo_suffix = 'DEFAULT';
-		# Restructuration du return par Johan PROTIN (jprotin at hipay dot com)
-		$isPay = $this->isPaymentPossible();
-        if ($isPay[0] && $isPay[1] && $isPay[2] && $isPay[3] && $isPay[4] && $isPay[5])
-        {
-			if (Tools::getIsset('hipay_error') && Tools::getValue('hipay_error') == 1)
-				if (version_compare(_PS_VERSION_, '1.5.0.0', '>='))
-					Context::getContext()->controller->errors[] = $this->l('An error has occurred during your payment, please try again.');
-				else
-					$smarty->assign('errors', array($this->l('An error has occurred during your payment, please try again.')));
-			$smarty->assign('hipay_prod', $this->env);
-			$smarty->assign('logo_suffix', $logo_suffix);
-			$smarty->assign(array(
-				'this_path' => $this->_path,
-				'redirection_url' => (version_compare(_PS_VERSION_, '1.5.0.0', '<') ? Tools::getShopDomainSsl(true).__PS_BASE_URI__.'modules/'.$this->name.'/redirect.php' : Context::getContext()->link->getModuleLink('hipay', 'redirect')),
-			));
-			return $this->display(__FILE__, (version_compare(_PS_VERSION_, '1.5.0.0', '<') ? '/views/templates/hook/' : '') . 'payment.tpl');
-		}
-	}
+        $iso_code = Country::getIsoById(Configuration::get('PS_COUNTRY_DEFAULT'));
 
-	public function hookDisplayPaymentEU($params)
-	{
-        $isPay = $this->isPaymentPossible();
+        if (in_array($iso_code, $this->limited_countries) == false) {
+            $this->_errors[] = $this->l('This module cannot work in your country');
+            return false;
+        }
 
-        if ($isPay[0] && $isPay[1] && $isPay[2] && $isPay[3] && $isPay[4] && $isPay[5])
-        {
-			$logo = $this->_path ."payment_button/EU.png";
-			return array(
-				'cta_text' => $this->l('Hipay'),
-				'logo' => $logo,
-				'action' => Tools::getShopDomainSsl(true).__PS_BASE_URI__.'modules/'.$this->name.'/redirect.php'
-			);
-		}
-	}
+        return parent::install() &&
+        		$this->installHipay();
+    }
 
-	private function getModuleCurrency($cart)
-	{
-		$id_currency = (int)self::MysqlGetValue('SELECT id_currency FROM `'._DB_PREFIX_.'module_currency` WHERE id_module = '.(int)$this->id);
+    public function uninstall()
+    {
+        return $this->uninstallAdminTab() &&
+            parent::uninstall();
 
-		if (!$id_currency OR $id_currency == -2)
-			$id_currency = Configuration::get('PS_CURRENCY_DEFAULT');
-		elseif ($id_currency == -1)
-			$id_currency = $cart->id_currency;
+    }
 
-		return $id_currency;
-	}
+    public function installAdminTab()
+    {
+        $class_name = 'AdminHiPayRefund';
 
-	private function formatLanguageCode($language_code)
-	{
-		$languageCodeArray = preg_split('/-|_/', $language_code);
-		if (!isset($languageCodeArray[1]))
-			$languageCodeArray[1] = $languageCodeArray[0];
-		return strtolower($languageCodeArray[0]).'_'.strtoupper($languageCodeArray[1]);
-	}
+        $tab = new Tab();
 
-	public function payment()
-	{
+        $tab->active = 1;
+        $tab->module = $this->name;
+        $tab->class_name = $class_name;
+        $tab->id_parent = -1;
 
-		if (!$this->active)
-			return;
+        foreach (Language::getLanguages(true) as $lang) {
+            $tab->name[$lang['id_lang']] = $this->name;
+        }
 
-		global $cart;
+        return $tab->add();
+    }
 
-		$id_currency = (int)$this->getModuleCurrency($cart);
-		// If the currency is forced to a different one than the current one, then the cart must be updated
-		if ($cart->id_currency != $id_currency)
-			if (Db::getInstance()->execute('UPDATE '._DB_PREFIX_.'cart SET id_currency = '.(int)$id_currency.' WHERE id_cart = '.(int)$cart->id))
-				$cart->id_currency = $id_currency;
+    public function uninstallAdminTab()
+    {
+        $class_name = 'AdminHiPayRefund';
 
-		$currency = new Currency($id_currency);
-		$language = new Language($cart->id_lang);
-		$customer = new Customer($cart->id_customer);
+        $id_tab = (int)Tab::getIdFromClassName($class_name);
 
-		require_once(dirname(__FILE__).'/mapi/mapi_package.php');
+        if ($id_tab) {
+            $tab = new Tab($id_tab);
+            return $tab->delete();
+        }
 
-		$hipayAccount = Configuration::get('HIPAY_ACCOUNT_'.$currency->iso_code);
-		$hipayPassword = Configuration::get('HIPAY_PASSWORD_'.$currency->iso_code);
-		$hipaySiteId = Configuration::get('HIPAY_SITEID_'.$currency->iso_code);
-		$hipaycategory = Configuration::get('HIPAY_CATEGORY_'.$currency->iso_code);
+        return false;
+    }
 
-		$paymentParams = new HIPAY_MAPI_PaymentParams();
-		$paymentParams->setLogin($hipayAccount, $hipayPassword);
-		$paymentParams->setAccounts($hipayAccount, $hipayAccount);
-		// EN_us is not a standard format, but that's what Hipay uses
-		if (isset($language->language_code))
-			$paymentParams->setLocale($this->formatLanguageCode($language->language_code));
-		else
-			$paymentParams->setLocale(Tools::strtolower($language->iso_code).'_'.Tools::strtoupper($language->iso_code));
-		$paymentParams->setMedia('WEB');
-		$paymentParams->setRating(Configuration::get('HIPAY_RATING'));
-		$paymentParams->setPaymentMethod(HIPAY_MAPI_METHOD_SIMPLE);
-		$paymentParams->setCaptureDay(HIPAY_MAPI_CAPTURE_IMMEDIATE);
-		$paymentParams->setCurrency(Tools::strtoupper($currency->iso_code));
-		$paymentParams->setIdForMerchant($cart->id);
-		$paymentParams->setMerchantSiteId($hipaySiteId);
-		$paymentParams->setIssuerAccountLogin(Context::getContext()->customer->email);
-		if (version_compare(_PS_VERSION_, '1.5.0.0', '<'))
-		{
-			$paymentParams->setUrlCancel(Tools::getShopDomainSsl(true).__PS_BASE_URI__.'order.php?step=3');
-			$paymentParams->setUrlNok(Tools::getShopDomainSsl(true).__PS_BASE_URI__.'order.php?step=3&hipay_error=1');
-			$paymentParams->setUrlOk(Tools::getShopDomainSsl(true).__PS_BASE_URI__.'order-confirmation.php?id_cart='.(int)$cart->id.'&id_module='.(int)$this->id.'&key='.$customer->secure_key);
-			$paymentParams->setUrlAck(Tools::getShopDomainSsl(true).__PS_BASE_URI__.'modules/'.$this->name.'/validation.php?token='.Tools::encrypt($cart->id.$cart->secure_key.Configuration::get('HIPAY_SALT')));
-			#
-			# Patch transfert du logo vers la page de paiement
-			# Le 16/11/2015 par Johan PROTIN (jprotin at hipay dot com)
-			#
-			if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off') { 
-				// Si le site utilise le protocol HTTPS alors on envoit l'URL avec HTTPS
-				$logo_url = Tools::getShopDomainSsl(true)._PS_IMG_.Configuration::get('PS_LOGO');
-				$paymentParams->setLogoUrl($logo_url);
-			} 
-			# ------------------------------------------------
-		}
-		else
-		{
-			$paymentParams->setUrlCancel(Context::getContext()->link->getPageLink('order', null, null, array('step' => 3)));
-			$paymentParams->setUrlNok(Context::getContext()->link->getPageLink('order', null, null, array('step' => 3, 'hipay_error' => 1)));
-			$paymentParams->setUrlOk(Context::getContext()->link->getPageLink('order-confirmation', null, null, array('id_cart' => (int)$cart->id, 'id_module' => (int)$this->id, 'key' => $customer->secure_key)));
-			$paymentParams->setUrlAck(Context::getContext()->link->getModuleLink('hipay', 'validation', array('token' => Tools::encrypt($cart->id.$cart->secure_key.Configuration::get('HIPAY_SALT')))));
-			#
-			# Patch transfert du logo vers la page de paiement
-			# Le 16/11/2015 par Johan PROTIN (jprotin at hipay dot com)
-			#
-			if (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] != 'off') {
-				// Si le site utilise le protocol HTTPS alors on envoit l'URL avec HTTPS
-				$logo_url = $this->context->link->getMediaLink(_PS_IMG_.Configuration::get('PS_LOGO'));
-				$paymentParams->setLogoUrl($logo_url);
-			}
-			# ------------------------------------------------
-		}
-		$paymentParams->setBackgroundColor('#FFFFFF');
-
-		if (!$paymentParams->check())
-			return $this->l('[Hipay] Error: cannot create PaymentParams');
-
-		$item = new HIPAY_MAPI_Product();
-		$item->setName($this->l('Cart'));
-		$item->setInfo('');
-		$item->setquantity(1);
-		$item->setRef($cart->id);
-		$item->setCategory($hipaycategory);
-		$item->setPrice($cart->getOrderTotal());
-
-		try {
-			if (!$item->check())
-				return $this->l('[Hipay] Error: cannot create "Cart" Product');
-		} catch (Exception $e) {
-			return $this->l('[Hipay] Error: cannot create "Cart" Product');
-		}
-
-		$items = array($item);
-
-		$order = new HIPAY_MAPI_Order();
-		$order->setOrderTitle($this->l('Order total'));
-		$order->setOrderCategory($hipaycategory);
-
-		if (!$order->check())
-			return $this->l('[Hipay] Error: cannot create Order');
-
-		try {
-			$commande = new HIPAY_MAPI_SimplePayment($paymentParams, $order, $items);
-		} catch (Exception $e) {
-			return $this->l('[Hipay] Error:').' '.$e->getMessage();
-		}
-
-		$xmlTx = $commande->getXML();
-		$output = HIPAY_MAPI_SEND_XML::sendXML($xmlTx);
-		$reply = HIPAY_MAPI_COMM_XML::analyzeResponseXML($output, $url, $err_msg, $err_keyword, $err_value, $err_code);
-
-		if ($reply === true)
-			Tools::redirectLink($url);
-		else
-		{
-			if (version_compare(_PS_VERSION_, '1.5.0.0', '<'))
-			{
-				global $smarty;
-				include(dirname(__FILE__).'/../../header.php');
-				$smarty->assign('errors', array('[Hipay] '.strval($err_msg).' ('.$output.')'));
-				$_SERVER['HTTP_REFERER'] = Tools::getShopDomainSsl(true).__PS_BASE_URI__.'order.php?step=3';
-				$smarty->display(_PS_THEME_DIR_.'errors.tpl');
-				include(dirname(__FILE__).'/../../footer.php');
-			}
-			else
-			{
-				Context::getContext()->controller->errors[] = '[Hipay] '.strval($err_msg).' ('.$output.')';
-				$_SERVER['HTTP_REFERER'] = Context::getContext()->link->getPageLink('order', true, null, array('step' => 3));
-			}
-		}
-		return $reply;
-	}
-
-	public function validation()
-	{		
-		# LOG
-		$message = '######################################'."\r\n";
-		$message .= '# Date Début Validation - ' . date("d/m/Y H:i:s") ."\r\n";
-		$message .= '#### Module actif - ' . ($this->active ? 'TRUE':'FALSE')."\r\n";
-		$message .= '#### Variable POST :'."\r\n";
-		$message .= print_r($_POST, true);
-		$message .= "\r\n";
-		# ---
-		$this->HipayLog($message);
-		if (!$this->active)
-			return;
-
-		if (!array_key_exists('xml', $_POST))
-			return;
-
-		if (_PS_MAGIC_QUOTES_GPC_)
-			$_POST['xml'] = stripslashes($_POST['xml']);
-
-		require_once(dirname(__FILE__).'/mapi/mapi_package.php');
-
-		# LOG
-		$this->HipayLog('#### Début HIPAY_MAPI_COMM_XML::analyzeNotificationXML'."\r\n");
-		# ---
-
-		if (HIPAY_MAPI_COMM_XML::analyzeNotificationXML($_POST['xml'], $operation, $status, $date, $time, $transid, $amount, $currency, $id_cart, $data) === false)
-		{
-			file_put_contents('logs'.Configuration::get('HIPAY_UNIQID').'.txt', '['.date('Y-m-d H:i:s').'] Analysis error: '.htmlentities($_POST['xml'])."\n", FILE_APPEND);
-			return false;
-		}
-
-		# LOG
-		$message = '#### Fin HIPAY_MAPI_COMM_XML::analyzeNotificationXML'."\r\n";
-		$message .= '#### Version Prestashop : ' . _PS_VERSION_;
-		# ---
-		$this->HipayLog($message);
-
-		if (version_compare(_PS_VERSION_, '1.5.0.0', '>='))
-		{
-			# LOG
-			$this->HipayLog('#### ID Panier : ' . (int)$id_cart."\r\n");
-			# ---
-			Context::getContext()->cart = new Cart((int)$id_cart);
-		}			
-
-		$cart = new Cart((int)$id_cart);
-
-		# LOG
-		$message = '#### TOKEN : ' . Tools::getValue('token')."\r\n";
-		$message .= '#### SECURE KEY : ' . $cart->secure_key."\r\n";
-		$message .= '#### HIPAY SALT : ' . Configuration::get('HIPAY_SALT')."\r\n";
-		$message .= '#### CLE ENCRYPTE : ' . Tools::encrypt($cart->id.$cart->secure_key.Configuration::get('HIPAY_SALT'))."\r\n";
-		# ---
-		$this->HipayLog($message);
-		if (Tools::encrypt($cart->id.$cart->secure_key.Configuration::get('HIPAY_SALT')) != Tools::getValue('token'))
-		{
-			# LOG
-			$this->HipayLog('#### TOKEN = CLE : NOK'."\r\n");
-			# ---
-			file_put_contents('logs'.Configuration::get('HIPAY_UNIQID').'.txt', '['.date('Y-m-d H:i:s').'] Token error: '.htmlentities($_POST['xml'])."\n", FILE_APPEND);
+    public function installHipay()
+    {
+		$return = $this->setCurrencies() &&
+		            $this->installAdminTab() &&
+		            $this->updateHiPayOrderStates() &&
+		            $this->registerHook('header') &&
+		            $this->registerHook('paymentReturn') &&
+		            $this->registerHook('paymentTop') &&
+		            $this->registerHook('backOfficeHeader') &&
+		            $this->registerHook('displayAdminOrderLeft');
+		if (version_compare(_PS_VERSION_, '1.7.0.0', '<')) {
+			$return_bis = $this->registerHook('paymentOptions');
 		} else {
-
-			# LOG
-			$message = '#### Opération : ' . trim($operation) ."\r\n";
-			$message .= '#### Status : ' . trim(strtolower($status)) ."\r\n";
-			# ---
-			$this->HipayLog($message);
-			if (trim($operation) == 'authorization' && trim(strtolower($status)) == 'waiting')
-			{
-				// Authorization WAITING
-				$orderMessage = $operation.": ".$status."\ndate: ".$date." ".$time."\ntransaction: ".$transid."\namount: ".(float)$amount." ".$currency."\nid_cart: ".(int)$id_cart;
-				//$this->_createAuthorizationOrderState();
-				$this->validateOrder((int)$id_cart, Configuration::get('HIPAY_WAITINGPAYMENT_OS'), (float)$amount, $this->displayName, $orderMessage, array(), NULL, false, $cart->secure_key);
-				
-				# LOG
-				$this->HipayLog('######## AW - création Commande / status : ' . (int)Configuration::get('HIPAY_WAITINGPAYMENT_OS') . "\r\n");
-				# ---	
-
-			}else if (trim($operation) == 'authorization' && trim(strtolower($status)) == 'ok')
-			{
-				// vérification si commande existante
-				$id_order = Order::getOrderByCartId((int)$id_cart);	
-
-				# LOG
-				$this->HipayLog('######## AOK - ID Commande : ' . ($id_order ? $id_order:'Pas de commande') . "\r\n");
-				# ---
-
-				if ($id_order !== false)
-				{
-					// change statut si commande en attente de paiement
-					$order = new Order((int)$id_order);
-					if ((int)$order->getCurrentState() == (int)Configuration::get('HIPAY_WAITINGPAYMENT_OS'))
-					{
-						// on affecte à la commande au statut paiement autorisé par HiPay
-						$statut_id = Configuration::get('HIPAY_AUTHORIZATION_OS');
-						$order_history = new OrderHistory();
-						$order_history->id_order = $id_order;
-						$order_history->changeIdOrderState($statut_id, $id_order);
-						$order_history->addWithemail();
-						# LOG
-						$this->HipayLog('######## AOK - Historique Commande / Change status : ' . (int)Configuration::get('HIPAY_AUTHORIZATION_OS') . "\r\n");
-						# ---
-					}
-				}else{
-					// on revérifie si la commande n'existe pas au cas où la capture soit arrivée avant
-					// sinon on ne fait rien
-					$id_order = Order::getOrderByCartId((int)$id_cart);				
-					if ($id_order === false)
-					{
-						// Authorization OK
-						$orderMessage = $operation.": ".$status."\ndate: ".$date." ".$time."\ntransaction: ".$transid."\namount: ".(float)$amount." ".$currency."\nid_cart: ".(int)$id_cart;
-						//$this->_createAuthorizationOrderState();
-						$this->validateOrder((int)$id_cart, Configuration::get('HIPAY_AUTHORIZATION_OS'), (float)$amount, $this->displayName, $orderMessage, array(), NULL, false, $cart->secure_key);
-
-						# LOG
-						$this->HipayLog('######## AOK - création Commande / status : ' . (int)Configuration::get('HIPAY_AUTHORIZATION_OS') . "\r\n");
-						# ---						
-
-					}
-				}
-			}
-			else if (trim($operation) == 'capture' && trim(strtolower($status)) == 'ok')
-			{
-				// Capture OK
-				$orderMessage = $operation.": ".$status."\ndate: ".$date." ".$time."\ntransaction: ".$transid."\namount: ".(float)$amount." ".$currency."\nid_cart: ".(int)$id_cart;
-				$id_order = Order::getOrderByCartId((int)$id_cart);
-
-				# LOG
-				$this->HipayLog('######## COK - ID Commande : ' . ($id_order ? $id_order:'Pas de commande') . "\r\n");
-				# ---
-				
-				if ($id_order !== false)
-				{
-					# LOG
-					$this->HipayLog('######## COK - id_order existant' . "\r\n");
-					# ---
-					$order = new Order((int)$id_order);
-					# LOG
-					$this->HipayLog('######## COK - objet order loadé' . "\r\n");
-					# ---
-					// si la commande est au statut Autorisation ok ou en attente de paiement 
-					// on change le statut en paiement accepté
-					if ((int)$order->getCurrentState() == (int)Configuration::get('HIPAY_AUTHORIZATION_OS')
-						|| (int)$order->getCurrentState() == (int)Configuration::get('HIPAY_WAITINGPAYMENT_OS'))
-					{
-						$statut_id = Configuration::get('PS_OS_PAYMENT');
-						$order_history = new OrderHistory();
-						$order_history->id_order = $id_order;
-						$order_history->changeIdOrderState($statut_id, $id_order);
-
-						$order_history->addWithemail();
-
-						# LOG
-						$this->HipayLog('######## COK - Historique Commande / Change status : ' . (int)Configuration::get('PS_OS_PAYMENT') . "\r\n");
-						# ---
-
-					}
-				}
-				else
-				{
-					$this->validateOrder((int)$id_cart, Configuration::get('PS_OS_PAYMENT'), (float)$amount, $this->displayName, $orderMessage, array(), NULL, false, $cart->secure_key);
-
-					# LOG
-					$this->HipayLog('######## COK - création Commande / status : ' . (int)Configuration::get('PS_OS_PAYMENT') . "\r\n");
-					# ---	
-				}
-				// Commande que prestashop lance mais n'a aucune incidence dans le module...
-				// Ajouté en commentaire
-				// Configuration::updateValue('HIPAY_CONFIGURATION_OK', true);
-			}
-			else if (trim($operation) == 'capture' && trim(strtolower($status)) == 'nok')
-			{
-				// Capture NOK
-				$id_order = Order::getOrderByCartId((int)$id_cart);
-
-				# LOG
-				$this->HipayLog('######## CNOK - ID Commande : ' . ($id_order ? $id_order:'Pas de commande') . "\r\n");
-				# ---
-
-				if ($id_order !== false)
-				{
-					$order = new Order((int)$id_order);
-					if ((int)$order->getCurrentState() == (int)Configuration::get('HIPAY_AUTHORIZATION_OS'))
-					{
-						$statut_id = Configuration::get('PS_OS_ERROR');
-						$order_history = new OrderHistory();
-						$order_history->id_order = $id_order;
-						$order_history->changeIdOrderState($statut_id, $id_order);
-
-						$order_history->addWithemail();
-
-						# LOG
-						$this->HipayLog('######## CNOK - Historique Commande / Change status : ' . (int)Configuration::get('PS_OS_ERROR') . "\r\n");
-						# ---
-					}
-				}
-			}
-			elseif (trim($operation) == 'refund' AND trim(strtolower($status)) == 'ok')
-			{
-				/* Paiement remboursé sur Hipay */
-				if (!($id_order = Order::getOrderByCartId((int)($id_cart))))
-					die(Tools::displayError());
-
-				$order = new Order((int)($id_order));
-
-				if (!$order->valid OR $order->getCurrentState() === Configuration::get('PS_OS_REFUND'))
-					die(Tools::displayError());
-
-				$statut_id = Configuration::get('PS_OS_REFUND');
-				$order_history = new OrderHistory();
-				$order_history->id_order = $id_order;
-				$order_history->changeIdOrderState($statut_id, $id_order);
-
-				$order_history->addWithemail();
-				
-				# LOG
-				$this->HipayLog('######## ROK - Historique Commande / Change status : ' . (int)Configuration::get('PS_OS_REFUND') . "\r\n");
-				# ---
-			}
+			$return_bis = $this->registerHook('payment') && $this->registerHook('displayPaymentEU');
 		}
-		#
-		# Patch LOG Pour les erreurs 500
-		#
-		$message = '# Date Fin Validation - ' . date("d/m/Y H:i:s") ."\r\n";
-		$message .= '######################################'."\r\n";
-		$this->HipayLog($message);
-		# ---------------------------------------------------------
-		return true;
-	}
 
-	/**
-	 * Uninstall and clean the module settings
+		return $return && $return_bis;
+    }
+
+    public function updateHiPayOrderStates()
+    {
+        $waiting_state_config   = 'HIPAY_OS_WAITING';
+        $waiting_state_color    = '#4169E1';
+        $waiting_state_names    = [];
+
+        $setup = [
+            'delivery'      => false,
+            'hidden'        => false,
+            'invoice'       => false,
+            'logable'       => false,
+            'module_name'	=> $this->name,
+            'send_email'	=> true,
+        ];
+
+        foreach (Language::getLanguages(false) as $language) {
+            if (Tools::strtolower($language['iso_code']) == 'fr') {
+                $waiting_state_names[(int)$language['id_lang']] = 'En attente d\'autorisation';
+            } else {
+                $waiting_state_names[(int)$language['id_lang']] = 'Waiting for authorization';
+            }
+        }
+
+        $this->saveOrderState($waiting_state_config, $waiting_state_color, $waiting_state_names, $setup);
+
+        $partial_state_config   = 'HIPAY_OS_PARTIALLY_REFUNDED';
+        $partial_state_color    = '#EC2E15';
+        $partial_state_names    = [];
+
+        foreach (Language::getLanguages(false) as $language) {
+            if (Tools::strtolower($language['iso_code']) == 'fr') {
+                $partial_state_names[(int)$language['id_lang']] = 'Partiellement remboursé';
+            } else {
+                $partial_state_names[(int)$language['id_lang']] = 'Partially refunded';
+            }
+        }
+
+        $this->saveOrderState($partial_state_config, $partial_state_color, $partial_state_names, $setup);
+
+        $total_state_config   = 'HIPAY_OS_TOTALLY_REFUNDED';
+        $total_state_color    = '#EC2E15';
+        $total_state_names    = [];
+
+        foreach (Language::getLanguages(false) as $language) {
+            if (Tools::strtolower($language['iso_code']) == 'fr') {
+                $total_state_names[(int)$language['id_lang']] = 'Totalement remboursé';
+            } else {
+                $total_state_names[(int)$language['id_lang']] = 'Totally refunded';
+            }
+        }
+
+        $this->saveOrderState($total_state_config, $total_state_color, $total_state_names, $setup);
+
+        return true;
+    }
+
+    /**
+     * Load configuration page
+     * @return string
+     */
+    public function getContent()
+    {
+        $form = new HipayForm($this);
+        $user_account = new HipayUserAccount($this);
+
+        $this->postProcess($user_account);
+
+        // Generate configuration forms
+        if ($this->configHipay->user_mail) {
+            $amount_limit = 1000;
+
+            $accounts = $user_account->getBalances();
+            $account = $user_account->getMainAccountBalance($accounts);
+
+            if (isset($account->balance)) {
+                $balance_warning = (int)$account->balance > $amount_limit;
+            } else {
+                $balance_warning = false;
+            }
+
+            $this->context->smarty->assign(array(
+                'is_logged' => true,
+                'amount_limit' => Tools::displayPrice($amount_limit, $this->context->currency),
+                'balance_warning' => $balance_warning,
+                'sandbox_form' => $form->getSandboxForm(),
+                'services_form' => $form->getCustomersServiceForm($user_account),
+                'settings_form' => $form->getSettingsForm($user_account),
+                'transactions_form' => $form->getTransactionsForm($user_account),
+            ));
+
+            if ($this->configHipay->welcome_message_shown == false) {
+            	// Set config 
+            	$this->setConfigHiPay('welcome_message_shown',true);
+                $this->context->smarty->assign('welcome_message', true);
+            }
+        } else {
+            $complete_form = $this->shouldDisplayCompleteLoginForm($user_account);
+
+            $this->context->smarty->assign(array(
+                'is_logged' => false,
+                'login_form' => $form->getLoginForm($complete_form),
+            ));
+        }
+
+        // Set alert messages
+        $this->context->smarty->assign(array(
+            'form_errors' => $this->_errors,
+            'form_successes' => $this->_successes,
+            'form_infos' => $this->_warnings,
+        ));
+
+        // Define templates paths
+        $alerts = $this->local_path.'views/templates/admin/alerts.tpl';
+        $configuration = $this->local_path.'views/templates/admin/configuration.tpl';
+
+        $this->context->smarty->assign(array(
+            'alerts' => $this->context->smarty->fetch($alerts),
+            'module_dir' => $this->_path,
+            'localized_rates_pdf_link' => $this->getLocalizedRatesPDFLink()
+        ));
+
+        return $this->context->smarty->fetch($configuration);
+    }
+
+    public function hookBackOfficeHeader()
+    {
+        if (Tools::getValue('configure') != 'hipay')
+            return false;
+
+        $this->context->controller->addJS($this->_path.'views/js/back.js');
+        $this->context->controller->addCSS($this->_path.'views/css/back.css');
+
+        return '<script type="text/javascript">
+            var email_error_message = "'.$this->l('Please, enter a valid email address').'.";
+        </script>';
+    }
+
+    public function hookDisplayAdminOrderLeft($params)
+    {
+        $order = new Order((int)$params['id_order']);
+
+        if ((! $order->id) || ($order->module != $this->name)) {
+            return false;
+        }
+
+        $details = $this->getAdminOrderRefundBlockDetails($order);
+
+        $this->context->controller->addCSS($this->_path.'views/css/refund.css');
+
+        if ($this->orderAlreadyRefunded($order)) {
+            return $this->display(__FILE__, 'views/templates/hook/already_refunded.tpl');
+        } elseif (! $this->isRefundAvailable($details)) {
+            return $this->display(__FILE__, 'views/templates/hook/cannot_be_refunded.tpl');
+        } elseif ($this->isProductionOrder($details)) {
+            $min_date = date('Y-m-d H:i:s', strtotime($order->date_add . ' +1 day'));
+
+            if ($min_date > date('Y-m-d H:i:s')) {
+                return $this->display(__FILE__, 'views/templates/hook/cannot_refund_yet.tpl');
+            }
+        }
+
+        $this->context->controller->addJS($this->_path.'views/js/order.js');
+
+        return $this->display(__FILE__, 'views/templates/hook/refund.tpl');
+    }
+
+    public function hookHeader()
+    {
+        return $this->context->controller->addCSS($this->_path.'/views/css/front.css');
+    }
+
+    /**
+     * Display a payment button
+     * @param array $params
+     * @return string
+     */
+    public function hookPayment($params)
+    {
+    	if ($this->configHipay->production_user_account_id) {
+            $currency_id = $params['cart']->id_currency;
+            $currency = new Currency((int)$currency_id);
+
+            if (in_array($currency->iso_code, $this->limited_currencies) == false) {
+                return false;
+            }
+
+            $this->smarty->assign(array(
+                'domain' => Tools::getShopDomainSSL(true),
+                'module_dir' => $this->_path,
+                'payment_button' => $this->getPaymentButton(),
+            ));
+
+            $this->smarty->assign('hipay_prod', !(bool)$this->configHipay->sandbox_mode);
+
+            return $this->display(__FILE__, 'views/templates/hook/payment.tpl');
+        }
+
+        return false;
+    }
+
+    /**
+     * Display the payment confirmation page
+     * @param array $params
+     */
+    public function hookPaymentReturn($params)
+    {
+        if ($this->active == false) {
+            return;
+        }
+
+        $order = $params['objOrder'];
+
+        if ($order->getCurrentOrderState()->id != Configuration::get('PS_OS_ERROR')) {
+            $this->smarty->assign('status', 'ok');
+        }
+
+        $this->smarty->assign(array(
+            'id_order' => $order->id,
+            'reference' => $order->reference,
+            'params' => $params,
+            'total' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
+        ));
+
+        return $this->display(__FILE__, 'views/templates/hook/confirmation.tpl');
+    }
+
+    public function hookPaymentTop()
+    {
+        $this->context->controller->addJS($this->_path.'views/js/front.js');
+    }
+
+    /**
+     * Check if the given currency is supported by the provider
+     * @param string $iso_code currency iso code
+     * @return boolean
+     */
+    public function isSupportedCurrency($iso_code)
+    {
+        return in_array(Tools::strtoupper($iso_code), $this->limited_currencies);
+    }
+
+    protected function postProcess($user_account)
+    {
+        $this->context->smarty->assign('sandbox', $this->configHipay->sandbox_mode);
+
+        if (Tools::isSubmit('submitSandboxMode')) {
+            $this->context->smarty->assign('active_tab', 'sandbox');
+            return $this->switchSandboxMode();
+        } elseif (Tools::isSubmit('submitReset')) {
+            return $this->clearAccountData();
+        } elseif (Tools::isSubmit('submitLogin')) {
+            return $this->login($user_account);
+        } elseif (Tools::isSubmit('submitDateRange')) {
+            $this->context->smarty->assign('active_tab', 'transactions');
+            return $this->saveTransactionsDateRange();
+        }
+    }
+
+    public function getLocalizedRatesPDFLink()
+    {
+        $shop_iso_country_id = Configuration::get('PS_COUNTRY_DEFAULT');
+        $shop_iso_country = Country::getIsoById((int)$shop_iso_country_id);
+        $shop_iso_country = Tools::strtoupper($shop_iso_country);
+
+        if (!$shop_iso_country || !in_array($shop_iso_country, Hipay::$available_rates_links)) {
+            $shop_iso_country = 'EN';
+        }
+
+        $localized_link = Hipay::PAYMENT_FEED_BASE_LINK.$shop_iso_country.'.pdf';
+
+        return $localized_link;
+    }
+
+    public function getAdminOrderRefundBlockDetails($order)
+    {
+        $currency       = new Currency($order->id_currency);
+        $messages       = Message::getMessagesByOrderId($order->id, true);
+        $message        = array_pop($messages);
+        $details        = json_decode($message['message']);
+        $id_transaction = $this->getTransactionId($details);
+
+        $form = new HipayForm($this);
+
+        $params = http_build_query([
+            'id_order'          => $order->id,
+            'id_transaction'    => $id_transaction,
+            'sandbox'           => (isset($details->Environment) && ($details->Environment != 'PRODUCTION')),
+        ]);
+
+        $this->smarty->assign([
+            'currency'          => $currency,
+            'details'           => $details,
+            'order'             => $order,
+            'transaction_id'    => $id_transaction,
+            'refund_link'       => $this->context->link->getAdminLink('AdminHiPayRefund&' . $params, true),
+        ]);
+
+        return $details;
+    }
+
+    /**
+     * Add waiting order state in database
+     * If it does not already exists
+     * @return boolean
+     */
+    protected function saveOrderState($config, $color, $names, $setup)
+    {
+        $state_id = Configuration::get($config);
+
+        if ((bool)$state_id == true) {
+            $order_state = new OrderState($state_id);
+        } else {
+            $order_state = new OrderState();
+        }
+
+        $order_state->name	= $names;
+        $order_state->color = $color;
+
+        foreach ($setup as $param => $value) {
+            $order_state->{$param} = $value;
+        }
+
+        if ((bool)$state_id == true) {
+            return $order_state->save();
+        } elseif ($order_state->add() == true) {
+            Configuration::updateValue($config, $order_state->id);
+            @copy($this->local_path.'logo.gif', _PS_ORDER_STATE_IMG_DIR_.(int)$order_state->id.'.gif');
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+    * Clear every single merchant account data
+    * @return boolean
+    */
+    protected function clearAccountData()
+    {
+        Configuration::deleteByName('HIPAY_CONFIG');
+        return true;
+    }
+
+    protected function createMerchantAccount($email, $first_name, $last_name)
+    {
+        $is_valid_name  = (bool)Validate::isName($first_name);
+        $is_valid_name  &= (bool)Validate::isName($last_name);
+
+        if ($is_valid_name) {
+            $user_account = new HipayUserAccount($this);
+
+            // Live mode
+            if ($user_account->isEmailAvailable($email, false) == true) {
+                $user_account->createAccount($email, $first_name, $last_name, false);
+            }
+
+            // Sandbox mode
+            if ($user_account->isEmailAvailable($email, true) == true) {
+                $user_account->createAccount($email, $first_name, $last_name, true);
+            }
+        }
+    }
+
+    /**
+     * Get the appropriate payment button's image
+     * @return string
+     */
+    protected function getPaymentButton()
+    {
+        $id_address = $this->context->cart->id_address_invoice;
+
+        if ($id_address) {
+            $address = new Address((int)$id_address);
+            $country = new Country((int)$address->id_country);
+            $iso_code = Tools::strtolower($country->iso_code);
+
+            if (file_exists(dirname(__FILE__).'/views/img/payment_buttons/'.$iso_code.'.png')) {
+                return $this->_path.'views/img/payment_buttons/'.$iso_code.'.png';
+            }
+        }
+
+        return $this->_path.'views/img/payment_buttons/default.png';
+    }
+
+    protected function getTransactionId($details)
+    {
+        foreach ($details as $key => $value) {
+            $tmp_key = strtolower(str_replace(' ', false, $key));
+
+            if (in_array($tmp_key, ['transactionid', 'idtransaction'])) {
+                return $value;
+            }
+        }
+
+        return false;
+    }
+
+    protected function isProductionOrder($details)
+    {
+        return (isset($details->Environment) && ($details->Environment == 'PRODUCTION'));
+    }
+
+    protected function isRefundAvailable($details)
+    {
+        $stack = array_values((array)$details);
+        $refund_available   = array_intersect($stack, static::$refund_available);
+
+        return ! empty($refund_available);
+    }
+
+    protected function login($user_account)
+    {
+        $email = Tools::getValue('install_user_email');
+        $is_email = (bool)Validate::isEmail($email);
+
+        $first_name = Tools::getValue('install_user_first_name');
+        $last_name = Tools::getValue('install_user_last_name');
+
+        $website_id = Tools::getValue('install_website_id');
+        $ws_login = Tools::getValue('install_ws_login');
+        $ws_password = Tools::getValue('install_ws_password');
+
+        if ($is_email == false) {
+            return false;
+        } elseif ($first_name && $last_name) {
+            return $this->createMerchantAccount($email, $first_name, $last_name);
+        } elseif ($website_id && $ws_login && $ws_password) {
+            $is_valid_website_id = (bool)Validate::isInt($website_id);
+            $is_valid_login = (bool)Validate::isMd5($ws_login);
+            $is_valid_password = (bool)Validate::isMd5($ws_password);
+
+            $this->setConfigHiPay('sandbox_mode', false);
+            if ($is_valid_website_id && $is_valid_login && $is_valid_password) {
+                return $this->registerExistingAccount($email, $website_id, $ws_login, $ws_password);
+            }
+
+            $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
+            $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
+
+            return false;
+        }
+
+        if ($user_account->isEmailAvailable($email)) {
+            // Email available
+            $this->_warnings[] = $this->l('To create your PrestaShop Payments by Hipay account, please enter your name and click on Subscribe');
+        } else {
+            // Email not available
+            $this->_warnings[] = $this->l('You already have an account, please fill the fields below');
+        }
+
+        return true;
+    }
+
+    protected function orderAlreadyRefunded($order)
+    {
+        $history_states = $order->getHistory($this->context->language->id);
+
+        $states = Configuration::getMultiple([
+            'HIPAY_OS_PARTIALLY_REFUNDED',
+            'HIPAY_OS_TOTALLY_REFUNDED',
+        ]);
+
+        foreach ($history_states as $state) {
+            if ($key = array_search($state['id_order_state'], $states)) {
+                $this->smarty->assign('state', $key);
+                return $state;
+            }
+        }
+
+        return false;
+    }
+
+    protected function registerExistingAccount($email, $website_id, $ws_login, $ws_password, $sandbox = false)
+    {
+        $prefix = $sandbox ? 'sandbox' : 'production';
+
+        $details = [
+            'user_mail' => $email,
+            $prefix.'_website_id' => $website_id,
+            $prefix.'_ws_login' => $ws_login,
+            $prefix.'_ws_password' => $ws_password,
+        ];
+
+        $this->saveConfigurationDetails($details);
+
+        $user_account = new HipayUserAccount($this);
+        $account = $user_account->getAccountInfos();
+
+        if (isset($account->code) && ($account->code == 0)) {
+        	$this->setConfigHiPay($prefix.'_user_account_id', $account->userAccountId);
+        } else {
+            $this->_errors[] = $this->l('Authentication failed!');
+            $this->clearAccountData();
+
+            return false;
+        }
+
+        return true;
+    }
+
+    protected function saveConfigurationDetails($details)
+    {
+        foreach ($details as $name => $value) {
+            $this->configHipay->$name = $value;
+        }
+        $this->setAllConfigHiPay();
+    }
+
+    protected function saveTransactionsDateRange()
+    {
+        if (Tools::isSubmit('date_from') && Tools::isSubmit('date_to')) {
+            $this->context->cookie->hipay_date_from = Tools::getValue('date_from');
+            $this->context->cookie->hipay_date_to = Tools::getValue('date_to');
+        }
+    }
+
+    /**
+     * Store the currencies list the module should work with
+     * @return boolean
+     */
+    protected function setCurrencies()
+    {
+        $shops = Shop::getShops(true, null, true);
+
+        foreach ($shops as $shop) {
+            $sql = 'INSERT IGNORE INTO `'._DB_PREFIX_.'module_currency` (`id_module`, `id_shop`, `id_currency`)
+                    SELECT '.(int)$this->id.', "'.(int)$shop.'", `id_currency`
+                    FROM `'._DB_PREFIX_.'currency`
+                    WHERE `deleted` = \'0\' AND `iso_code` IN (\''.implode($this->limited_currencies, '\',\'').'\')';
+
+            return (bool)Db::getInstance()->execute($sql);
+        }
+
+        return true;
+    }
+
+    protected function shouldDisplayCompleteLoginForm($user_account)
+    {
+        // If merchant tries to login / subscribe
+        if (Tools::isSubmit('submitLogin') == true) {
+            $email = Tools::getValue('install_user_email');
+
+            if (Validate::isEmail($email)) {
+                return $user_account->isEmailAvailable($email) ? 'new_account' : 'existing_account';
+            }
+
+            $this->module->_errors[] = $this->l('Invalid email address');
+        }
+
+        return false;
+    }
+
+    protected function switchSandboxMode()
+    {
+        $email = $this->configHipay->user_mail;
+
+        $sandbox_mode = (bool)Tools::getValue('sandbox_account_mode');
+        $this->setConfigHiPay('sandbox_mode', $sandbox_mode);
+        $this->context->smarty->assign('sandbox', $sandbox_mode);
+
+        if ($sandbox_mode) {
+            $sandbox_website_id = Tools::getValue('sandbox_website_id');
+            $sandbox_ws_login = Tools::getValue('sandbox_ws_login');
+            $sandbox_ws_password = Tools::getValue('sandbox_ws_password');
+
+            $is_valid_sandbox_website_id = (bool)Validate::isInt($sandbox_website_id);
+            $is_valid_sandbox_login = (bool)Validate::isMd5($sandbox_ws_login);
+            $is_valid_sandbox_password = (bool)Validate::isMd5($sandbox_ws_password);
+
+            if ($sandbox_mode && $is_valid_sandbox_website_id && $is_valid_sandbox_login && $is_valid_sandbox_password) {
+                $this->registerExistingAccount($email, $sandbox_website_id, $sandbox_ws_login, $sandbox_ws_password, $sandbox_mode);
+            }
+        }
+
+        $website_id = Tools::getValue('website_id');
+        $ws_login = Tools::getValue('ws_login');
+        $ws_password = Tools::getValue('ws_password');
+
+        $is_valid_website_id = (bool)Validate::isInt($website_id);
+        $is_valid_login = (bool)Validate::isMd5($ws_login);
+        $is_valid_password = (bool)Validate::isMd5($ws_password);
+
+        if ($is_valid_website_id && $is_valid_login && $is_valid_password) {
+            $this->registerExistingAccount($email, $website_id, $ws_login, $ws_password);
+        }
+
+        return true;
+    }
+    /*
+     * VERSION PS 1.7
+     *
+     */
+    public function hookPaymentOptions($params)
+    {
+        /*if (!$this->active) {
+            return;
+        }
+
+        if (!$this->checkCurrency($params['cart'])) {
+            return;
+        }
+
+        $payment_options = [
+            $this->getOfflinePaymentOption(),
+            $this->getExternalPaymentOption(),
+            $this->getEmbeddedPaymentOption(),
+            $this->getIframePaymentOption(),
+        ];
+
+        return $payment_options;*/
+        if (!$this->active) {
+            return;
+        }
+
+        if (!$this->checkCurrency($params['cart'])) {
+            return;
+        }
+
+        $this->context->smarty->assign(
+            $this->getTemplateVarInfos()
+        );
+
+        $newOption = new PaymentOption();
+        $newOption->setCallToActionText($this->l('Pay by Credit Card'))
+                      ->setAction($this->context->link->getModuleLink($this->name, 'validation', array(), true))
+                      ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'));
+        $payment_options = [
+            $newOption,
+        ];
+
+        return $payment_options;
+    }
+
+    public function checkCurrency($cart)
+    {
+        $currency_order = new Currency($cart->id_currency);
+        $currencies_module = $this->getCurrency($cart->id_currency);
+
+        if (is_array($currencies_module)) {
+            foreach ($currencies_module as $currency_module) {
+                if ($currency_order->id == $currency_module['id_currency']) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public function getOfflinePaymentOption()
+    {
+        $offlineOption = new PaymentOption();
+        $offlineOption->setCallToActionText($this->l('Pay offline'))
+                      ->setAction($this->context->link->getModuleLink($this->name, 'validation', array(), true))
+                      ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
+                      ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.jpg'));
+
+        return $offlineOption;
+    }
+
+    public function getExternalPaymentOption()
+    {
+        $externalOption = new PaymentOption();
+        $externalOption->setCallToActionText($this->l('Pay external'))
+                       ->setAction($this->context->link->getModuleLink($this->name, 'validation', array(), true))
+                       ->setMethod('POST')
+                       ->setInputs([
+                            'token' => [
+                                'name' =>'token',
+                                'type' =>'hidden',
+                                'value' =>'12345689',
+                            ],
+                        ])
+                       ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
+                       ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.jpg'));
+
+        return $externalOption;
+    }
+
+    public function getEmbeddedPaymentOption()
+    {
+        $embeddedOption = new PaymentOption();
+        $embeddedOption->setCallToActionText($this->l('Pay embedded'))
+                       ->setForm($this->generateForm())
+                       ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
+                       ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.jpg'));
+
+        return $embeddedOption;
+    }
+
+    public function getIframePaymentOption()
+    {
+        $iframeOption = new PaymentOption();
+        $iframeOption->setCallToActionText($this->l('Pay iframe'))
+                     ->setAction($this->context->link->getModuleLink($this->name, 'iframe', array(), true))
+                     ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
+                     ->setLogo(Media::getMediaPath(_PS_MODULE_DIR_.$this->name.'/payment.jpg'));
+
+        return $iframeOption;
+    }
+
+    protected function generateForm()
+    {
+        $months = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $months[] = sprintf("%02d", $i);
+        }
+
+        $years = [];
+        for ($i = 0; $i <= 10; $i++) {
+            $years[] = date('Y', strtotime('+'.$i.' years'));
+        }
+
+        $this->context->smarty->assign([
+            'action' => $this->context->link->getModuleLink($this->name, 'validation', array(), true),
+            'months' => $months,
+            'years' => $years,
+        ]);
+
+        return $this->context->smarty->fetch('module:views/templates/front/17_payment_form.tpl');
+    }
+
+    /*
+     * Function to get the module configuration
+ 	 * @user_mail	
+     * @sandbox_mode boolean
+     * @sandox_user_account_id integer
+	 * @sandbox_website_id integer
+	 * @sandbox_ws_login varchar
+	 * @sandbox_ws_password varchar
+     * 
+     * @production_user_account_id integer
+	 * @production_website_id integer
+	 * @production_ws_login varchar
+	 * @production_ws_password varchar
 	 *
-	 * @return	bool
-	 */
-	public function uninstall()
-	{
-		parent::uninstall();
-
-		$result = Db::getInstance()->ExecuteS('
-			SELECT `id_zone`, `name`
-			FROM `'._DB_PREFIX_.'zone`
-			WHERE `active` = 1
-		');
-
-		foreach ($result as $rowValues)
-		{
-			Configuration::deleteByName('HIPAY_AZ_'.$rowValues['id_zone']);
-			Configuration::deleteByName('HIPAY_AZ_ALL_'.$rowValues['id_zone']);
-		}
-		Db::getInstance()->Execute('DELETE FROM `'._DB_PREFIX_.'module_country` WHERE `id_module` = '.(int)$this->id);
-
-		return (true);
-	}
-
-	public function getContent()
-	{
-		global $currentIndex;
-		$warnings = '';
-		$shopId = false;
-
-		if ($currentIndex == '' && version_compare(_PS_VERSION_, '1.5.0.0', '>='))
-		{
-			$currentIndex = 'index.php?controller='.Tools::safeOutput(Tools::getValue('controller'));
-		}
-		#
-		# Patch Gestion de la multiboutique si PS >= 1.5.0.0
-		# Le 16/11/2015 par Johan PROTIN (jprotin at hipay dot com)
-		#
-		if(version_compare(_PS_VERSION_, '1.5.0.0', '>=')){			
-			$shopId = Context::getContext()->shop->id;			
-		}
-		# -------------------------------------------------
-		$currencies = DB::getInstance()->ExecuteS('SELECT c.iso_code, c.name, c.sign FROM '._DB_PREFIX_.'currency c');
-
-		if (Tools::isSubmit('submitHipayAZ'))
-		{
-			// Delete all configurated zones
-			foreach ($_POST as $key => $val)
-			{
-				if (strncmp($key, 'HIPAY_AZ_ALL_', strlen('HIPAY_AZ_ALL_')) == 0)
-				{
-					$id = substr($key, -(strlen($key) - strlen('HIPAY_AZ_ALL_')));
-					Configuration::updateValue('HIPAY_AZ_'.$id, 'ko');
-				}
-			}
-			#
-			# Patch Prise en compte du shop id si PS >= 1.5.0.0
-			# Le 16/11/2015 par Johan PROTIN (jprotin at hipay dot com)
-			#
-			$reqZone = 'DELETE FROM `'._DB_PREFIX_.'module_country` WHERE `id_module` = '.(int)$this->id;
-			if($shopId)
-			{
-				$reqZone .= ' AND `id_shop` = '.(int)$shopId;
-			}
-			Db::getInstance()->Execute($reqZone);			
-			# -------------------------------------------------
-			// Add the new configuration zones
-			foreach ($_POST as $key => $val)
-			{
-				if (strncmp($key, 'HIPAY_AZ_', strlen('HIPAY_AZ_')) == 0)
-					Configuration::updateValue($key, 'ok');
-			}
-			$request = 'SELECT id_country FROM '._DB_PREFIX_.'country WHERE ';
-			$results = Db::getInstance()->ExecuteS($request.$this->getRequestZones('id_zone'));
-
-			#
-			# Patch Prise en compte du shop id si PS >= 1.5.0.0
-			# Le 16/11/2015 par Johan PROTIN (jprotin at hipay dot com)
-			#
-			foreach ($results as $rowValues){
-				Db::getInstance()->Execute('
-					INSERT INTO '._DB_PREFIX_.'module_country VALUE 
-					('.(int)$this->id.', '.($shopId !== false ?  $shopId.',' : '').' '.(int)$rowValues['id_country'].')');
-			}
-			# -------------------------------------------------
-		}
-		elseif (Tools::isSubmit('submitHipay'))
-		{
-
-			$accounts = array();
-			foreach ($currencies as $currency)
-			{
-				if (Configuration::get('HIPAY_SITEID_'.$currency['iso_code']) != Tools::getValue('HIPAY_SITEID_'.$currency['iso_code']))
-					Configuration::updateValue('HIPAY_CATEGORY_'.$currency['iso_code'], false);
-
-				Configuration::updateValue('HIPAY_PASSWORD_'.$currency['iso_code'], trim(Tools::getValue('HIPAY_PASSWORD_'.$currency['iso_code'])));
-				Configuration::updateValue('HIPAY_SITEID_'.$currency['iso_code'], trim(Tools::getValue('HIPAY_SITEID_'.$currency['iso_code'])));
-				Configuration::updateValue('HIPAY_CATEGORY_'.$currency['iso_code'], Tools::getValue('HIPAY_CATEGORY_'.$currency['iso_code']));
-				Configuration::updateValue('HIPAY_ACCOUNT_'.$currency['iso_code'], Tools::getValue('HIPAY_ACCOUNT_'.$currency['iso_code']));
-
-				if ($this->env AND Tools::getValue('HIPAY_ACCOUNT_'.$currency['iso_code']))
-					$accounts[Tools::getValue('HIPAY_ACCOUNT_'.$currency['iso_code'])] = 1;
-			}
-
-			$i = 1;
-			$dataSync = 'http://www.prestashop.com/modules/hipay.png?mode='.($this->env ? 'prod' : 'test');
-			foreach ($accounts as $account => $null)
-				$dataSync .= '&account'.($i++).'='.urlencode($account);
-
-			Configuration::updateValue('HIPAY_RATING', Tools::getValue('HIPAY_RATING'));
-
-			$warnings .= $this->displayConfirmation($this->l('Configuration updated').'<img src="'.$dataSync.'" style="float:right" />');
-		}
-		elseif (Tools::isSubmit('submitHipayPaymentButton'))
-		{
-			Configuration::updateValue('HIPAY_PAYMENT_BUTTON', Tools::getValue('payment_button'));
-		}
-
-		// Check configuration
-		$allow_url_fopen = ini_get('allow_url_fopen');
-		$openssl = extension_loaded('openssl');
-		$curl = extension_loaded('curl');
-		$ping = ($allow_url_fopen AND $openssl AND $fd = fsockopen('payment.hipay.com', 443) AND fclose($fd));
-		$online = (in_array(Tools::getRemoteAddr(), array('127.0.0.1', '::1')) ? false : true);
-		$categories = true;
-		$categoryRetrieval = true;
-
-		foreach ($currencies as $currency)
-		{
-			$hipaySiteId = Configuration::get('HIPAY_SITEID_'.$currency['iso_code']);
-			$hipayAccountId = Configuration::get('HIPAY_ACCOUNT_'.$currency['iso_code']);
-			if ($hipaySiteId && $hipayAccountId && !count($this->getHipayCategories($hipaySiteId, $hipayAccountId)))
-				$categoryRetrieval = false;
-
-			if ((Configuration::get('HIPAY_SITEID_'.$currency['iso_code']) && !Configuration::get('HIPAY_CATEGORY_'.$currency['iso_code'])))
-				$categories = false;
-		}
-
-		if (!$allow_url_fopen OR !$openssl OR !$curl OR !$ping OR !$categories OR !$categoryRetrieval OR !$online)
-		{
-			$warnings .= '
-			<div class="warning warn">
-				'.($allow_url_fopen ? '' : '<h3>'.$this->l('You are not allowed to open external URLs').'</h3>').'
-				'.($curl ? '' : '<h3>'.$this->l('cURL is not enabled').'</h3>').'
-				'.($openssl ? '' : '<h3>'.$this->l('OpenSSL is not enabled').'</h3>').'
-				'.(($allow_url_fopen AND $openssl AND !$ping) ? '<h3>'.$this->l('Cannot access payment gateway').' '.HIPAY_GATEWAY_URL.' ('.$this->l('check your firewall').')</h3>' : '').'
-				'.($online ? '' : '<h3>'.$this->l('Your shop is not online').'</h3>').'
-				'.($categories ? '' : '<h3>'.$this->l('Hipay categories are not defined for each Site ID').'</h3>').'
-				'.($categoryRetrieval ? '' : '<h3>'.$this->l('Impossible to retrieve Hipay categories. Please refer to your error log for more details.').'</h3>').'
-			</div>';
-		}
-
-		// Get subscription form value
-		$form_values = $this->getFormValues();
-
-		// Lang of the button
-		$iso_code = Context::getContext()->language->iso_code;
-		if (!in_array($iso_code, array('fr', 'en', 'es', 'it')))
-			$iso_code = 'en';
-
-		$form_errors = '';
-		$account_created = false;
-		if (Tools::isSubmit('create_account_action'))
-			$account_created = $this->processAccountCreation($form_errors);
-
-		$link = Tools::safeOutput($_SERVER['REQUEST_URI']);
-
-		$form = '
-		<style>
-			.hipay_label {float:none;font-weight:normal;padding:0;text-align:left;width:100%;line-height:30px}
-			.hipay_help {vertical-align:middle}
-			#hipay_table {border:1px solid #383838}
-			#hipay_table td {border:1px solid #383838; width:250px; padding-left:8px; text-align:center}
-			#hipay_table td.hipay_end {border-top:none}
-			#hipay_table td.hipay_block {border-bottom:none}
-			#hipay_steps_infos {border:none; margin-bottom:20px}
-			/*#hipay_steps_infos td {border:none; width:70px; height:60px;padding-left:8px; text-align:left}*/
-			#hipay_steps_infos td.tab2 {border:none; width:700px;; height:60px;padding-left:8px; text-align:left}
-			#hipay_steps_infos td.hipay_end {border-top:none}
-			#hipay_steps_infos td.hipay_block {border-bottom:none}
-			#hipay_steps_infos td.hipay_block {border-bottom:none}
-			#hipay_steps_infos .account-creation input[type=text], #hipay_steps_infos .account-creation select {width: 300px; margin-bottom: 5px}
-			.hipay_subtitle {color: #777; font-weight: bold}
-		</style>
-	<fieldset>
-		<legend><img src="../modules/'.$this->name.'/logo.gif" /> HiPay</legend>
-		'.$warnings.'
-		<p style="text-align:center;margin-bottom:30px;"><img src="../modules/'.$this->name.'/hipay.gif" /></p>
-		<span class="hipay_subtitle">'.$this->l('The fast, simple multimedia payment solution for everyone in France and Europe!').'</span><br />
-		'.$this->l('Thanks to its adaptability and performance, Hipay has already won over 12,000 merchants and a million users. Its array of 15 of the most effective payment solutions in Europe offers your customers instant recognition and a reassuring guarantee for their consumer habits.').'
-		<br />
-		<br />'.$this->l('Once your account is activated you will receive more details by email.').'
-		<br />'.$this->l('All merchant using Prestashop can benefit from special price by contacting the following email:').' <strong><a href="mailto:prestashop@hipay.com">prestashop@hipay.com</a></strong><br />
-		<br /><strong>'.$this->l('Do not hesitate to contact us. The fees can decrease by 50%.').'</strong><br />
-		<br />'.$this->l('Hipay boosts your sales Europe-wide thanks to:').'
-		<ul>
-			<li>'.$this->l('Payment solutions specific to each European country;').'</li>
-			<li>'.$this->l('No subscription or installation charges;').'</li>
-			<li>'.$this->l('Contacts with extensive experience of technical and financial issues;').'</li>
-			<li>'.$this->l('Dedicated customer service;').'</li>
-			<li>'.$this->l('Anti-fraud system and permanent monitoring for high-risk behaviour.').'</li>
-		</ul>
-		'.$this->l('Hipay is part of the Hi-Media Group (Allopass).').'<br /><br />
-		&#8658; '.$this->l('You can get a PDF documentation to configure HiPay in Prestashop').' : <a href="https://www.hipay.com/dl/HiPay_Wallet_Prestashop_Configuration_Guide_EN.pdf" target="_blank">English</a> - <a href="https://www.hipay.com/dl/HiPay_Wallet_Configuration_Module_Prestashop_FR.pdf" target="_blank">Français</a>
-	</fieldset>
-	<div class="clear">&nbsp;</div>
-	<fieldset>
-		<legend><img src="../modules/'.$this->name.'/logo.gif" /> '.$this->l('Configuration').'</legend>
-		'.$this->l('The configuration of Hipay is really easy and runs into 3 steps').'<br /><br />
-		<table id="hipay_steps_infos" cellspacing="0" cellpadding="0">
-			'.($account_created ? '<tr><td></td><td><div class="conf">'.$this->l('Account created!').'</div></td></tr>' : '').'
-			<tr>
-				<td valign="top" style="padding-top:6px;"><img src="../modules/'.$this->name.'/1.png" alt="step 1" /></td>
-				<td class="tab2">'.(Configuration::get('HIPAY_SITEID')
-					? '<a href="https://www.hipay.com/auth" style="color:#D9263F;font-weight:700">'.$this->l('Log in to your merchant account').'</a><br />'
-					: '<a id="account_creation" href="https://www.hipay.com/registration/register" style="color:#D9263F;font-weight:700"><img src="../modules/'.$this->name.'/button_'.$iso_code.'.jpg" alt="'.$this->l('Create a Hipay account').'" title="'.$this->l('Create a Hipay account').'" border="0" /></a>
-					<br /><br />'.$this->l('If you already have an account you can go directly to step 2.')).'<br /><br />
-				</td>
-			</tr>
-			<tr id="account_creation_form" style="'.(!Tools::isSubmit('create_account_action') || $account_created ? 'display: none;': '').'">
-				<td></td>
-				<td class="tab2">';
-		if (!empty($form_errors))
-		{
-			$form .= '<div class="warning warn">';
-			$form .= $form_errors;
-			$form .= '</div>';
-		}
-		$form .= '
-					<form class="account-creation" action="'.$currentIndex.'&configure='.$this->name.'&token='.Tools::safeOutput(Tools::getValue('token')).'" method="post">
-						<div class="clear"><label for="email">'.$this->l('E-mail').'</label><input type="text" value="'.$form_values['email'].'" name="email" id="email"/></div>
-						<div class="clear"><label for="firstname">'.$this->l('Firstname').'</label><input type="text" value="'.$form_values['firstname'].'" name="firstname" id="firstname"/></div>
-						<div class="clear"><label for="lastname">'.$this->l('Lastname').'</label><input type="text" value="'.$form_values['lastname'].'" name="lastname" id="lastname"/></div>
-						<div class="clear">
-							<label for="currency">'.$this->l('Currency').'</label>
-							<select name="currency" id="currency">
-								<option value="EUR">'.$this->l('Euro').'</option>
-								<option value="CAD">'.$this->l('Canadian dollar').'</option>
-								<option value="USD">'.$this->l('United States Dollar').'</option>
-								<option value="CHF">'.$this->l('Swiss franc').'</option>
-								<option value="AUD">'.$this->l('Australian dollar').'</option>
-								<option value="GBP">'.$this->l('British pound').'</option>
-								<option value="SEK">'.$this->l('Swedish krona').'</option>
-							</select>
-						</div>
-						<div class="clear">
-							<label for="business-line">'.$this->l('Business line').'</label>
-							<select name="business-line" id="business-line">';
-		foreach ($this->getBusinessLine() as $business)
-			if ($business->id == $form_values['business_line'])
-				$form .= '<option value="'.$business->id.'" selected="selected">'.$business->label.'</option>';
-			else
-				$form .= '<option value="'.$business->id.'">'.$business->label.'</option>';
-		$form .= '
-							</select>
-						</div>
-						<div class="clear">
-							<label for="website-topic">'.$this->l('Website topic').'</label>
-							<select id="website-topic" name="website-topic"></select>
-						</div>
-						<div class="clear"><label for="contact-email">'.$this->l('Website contact e-mail').'</label><input type="text" value="'.$form_values['contact_email'].'" name="contact-email" id="contact-email"/></div>
-						<div class="clear"><label for="website-name">'.$this->l('Website name').'</label><input type="text" value="'.$form_values['website_name'].'" name="website-name" id="website-name"/></div>
-						<div class="clear"><label for="website-url">'.$this->l('Website URL').'</label><input type="text" value="'.$form_values['website_url'].'" name="website-url" id="website-url"/></div>
-						<div class="clear"><label for="website-password">'.$this->l('Website merchant password').'</label><input type="text"  value="'.$form_values['password'].'"name="website-password" id="website-password"/></div>
-						<div class="clear"><input type="submit" name="create_account_action"/></div>
-					</form>
-				</td>
-			</tr>
-			<tr>
-				<td><img src="../modules/'.$this->name.'/2.png" alt="step 2" /></td>
-				<td class="tab2">'.$this->l('Activate the Hipay solution in your Prestashop, it\'s free!').'</td>
-			</tr>
-			<tr>
-				<td></td>
-				<td class="tab2">
-				<p>'.$this->l('What you should do:').'</p>
-				<ul>
-					<li>'.$this->l('Set your account information (id account, password and id website).').'</li>
-					<li>'.$this->l('Select the category and age group.').'</li>
-					<li>'.$this->l('Set up an email address for notifications of payment.').'</li>
-				</ul>
-				<p>'.$this->l('For more information , go on the tab " how to set Hipay ".').'</p>
-				</td>
-			</tr>
-			
-			<tr><td></td><td>
-
-		<form action="'.$link.'" method="post" style="padding-left:6px;">
-		<table id="hipay_table" cellspacing="0" cellpadding="0">
-			<tr>
-				<td style="">&nbsp;</td>
-				<td style="height:40px;">'.$this->l('HiPay account').'</td>
-			</tr>';
-
-		foreach ($currencies as $currency)
-		{
-			$form .= '<tr>
-						<td class="hipay_block"><b>'.$this->l('Configuration in').' '.$currency['name'].' '.$currency['sign'].'</b></td>
-						<td class="hipay_prod hipay_block" style="padding-left:10px">
-							<label class="hipay_label" for="HIPAY_ACCOUNT_'.$currency['iso_code'].'">'.$this->l('Account number').' <a href="../modules/'.$this->name.'/screenshots/accountnumber.png" target="_blank"><img src="../modules/'.$this->name.'/help.png" class="hipay_help" /></a></label><br />
-							<input type="text" id="HIPAY_ACCOUNT_'.$currency['iso_code'].'" name="HIPAY_ACCOUNT_'.$currency['iso_code'].'" value="'.Tools::safeOutput(Tools::getValue('HIPAY_ACCOUNT_'.$currency['iso_code'], Configuration::get('HIPAY_ACCOUNT_'.$currency['iso_code']))).'" />
-							<br /><p style="text-align: left !important;"><i>'.$this->l('The Hipay account ID where the website is registered. This is your main account.').'<br /> <span style="color:red">'.$this->l('Do not use your member Id here!.').'</span></i></p>
-							<label class="hipay_label" for="HIPAY_PASSWORD_'.$currency['iso_code'].'">'.$this->l('Merchant password').' <a href="../modules/'.$this->name.'/screenshots/merchantpassword.png" target="_blank"><img src="../modules/'.$this->name.'/help.png" class="hipay_help" /></a></label><br />
-							<input type="text" id="HIPAY_PASSWORD_'.$currency['iso_code'].'" name="HIPAY_PASSWORD_'.$currency['iso_code'].'" value="'.Tools::safeOutput(Tools::getValue('HIPAY_PASSWORD_'.$currency['iso_code'], Configuration::get('HIPAY_PASSWORD_'.$currency['iso_code']))).'" />
-							<br /><p style="text-align: left !important;"><i>'.$this->l('The password of the account on which the merchant website is registered.( this is not the ID password ).').'<br />
-							<span style="color:red">'.$this->l('To create a new merchant password: Log in to your Hipay account, go to Payment Buttons where you can find the list of registered sites.').' '.$this->l('Click information website of the website concerned.').' '.$this->l('Enter your merchant password and click confirm').' '.$this->l('Remember to also enter your new password here.').'</span></i></p>
-							<label class="hipay_label" for="HIPAY_SITEID_'.$currency['iso_code'].'">'.$this->l('Site ID').' <a href="../modules/'.$this->name.'/screenshots/siteid.png" target="_blank"><img src="../modules/'.$this->name.'/help.png" class="hipay_help" /></a></label><br />
-							<input type="text" id="HIPAY_SITEID_'.$currency['iso_code'].'" name="HIPAY_SITEID_'.$currency['iso_code'].'" value="'.Tools::safeOutput(Tools::getValue('HIPAY_SITEID_'.$currency['iso_code'], Configuration::get('HIPAY_SITEID_'.$currency['iso_code']))).'" />
-							<br /><p style="text-align: left !important;"><i>'.$this->l('Website ID selected.').'<br />
-							<span style="color:red">'.$this->l('For a website ID, register your store on the corresponding HiPay account.').' '.$this->l('You can find this option on your HiPay statement under Payments buttons.').'</span></i></p>';
-
-			if ($ping && ($hipaySiteId = (int)Configuration::get('HIPAY_SITEID_'.$currency['iso_code'])) && ($hipayAccountId = (int)Configuration::get('HIPAY_ACCOUNT_'.$currency['iso_code'])))
-			{
-				$form .= '	<label for="HIPAY_CATEGORY_'.$currency['iso_code'].'" class="hipay_label">'.$this->l('Category').'</label><br />
-							<select id="HIPAY_CATEGORY_'.$currency['iso_code'].'" name="HIPAY_CATEGORY_'.$currency['iso_code'].'">';
-				foreach ($this->getHipayCategories($hipaySiteId, $hipayAccountId) as $id => $name)
-					$form.= '	<option value="'.(int)$id.'" '.(Tools::getValue('HIPAY_CATEGORY_'.$currency['iso_code'], Configuration::get('HIPAY_CATEGORY_'.$currency['iso_code'])) == $id ? 'selected="selected"' : '').'>'.htmlentities($name, ENT_COMPAT, 'UTF-8').'</option>';
-				$form .= '	</select><br /><p style="text-align: left !important;"><i>'.$this->l('Choose the order type.').'<br /><span style="color:red">'.$this->l('A list of categories (based on the choice of business type and category of your site on Hipay ).').'<br />'.$this->l('1. Enter your website ID').'<br />'.$this->l('2. Click Save Settings').'<br />'.$this->l('The list " Order Type " will be updated.').'<br />'.$this->l('4. Choose the appropriate category and click Save Settings again.').'</span></i></p>';
-			}
-
-			$form .= '	</td>
-					</tr>
-					<tr><td class="hipay_end">&nbsp;</td><td class="hipay_prod hipay_end">&nbsp;</td>';
-			$form .= '</tr>';
-		}
-
-		$form .= '</table>
-				<hr class="clear" />
-				<label for="HIPAY_RATING">'.$this->l('Authorized age group').' :</label>
-				<div class="margin-form">
-					<select id="HIPAY_RATING" name="HIPAY_RATING">
-						<option value="ALL">'.$this->l('For all ages').'</option>
-						<option value="+12" '.(Tools::getValue('HIPAY_RATING', Configuration::get('HIPAY_RATING')) == '+12' ? 'selected="selected"' : '').'>'.$this->l('For ages 12 and over').'</option>
-						<option value="+16" '.(Tools::getValue('HIPAY_RATING', Configuration::get('HIPAY_RATING')) == '+16' ? 'selected="selected"' : '').'>'.$this->l('For ages 16 and over').'</option>
-						<option value="+18" '.(Tools::getValue('HIPAY_RATING', Configuration::get('HIPAY_RATING')) == '+18' ? 'selected="selected"' : '').'>'.$this->l('For ages 18 and over').'</option>
-					</select>
-				</div>
-				<hr class="clear" />
-				<p>'.$this->l('Notice: please verify that the currency mode you have chosen in the payment tab is compatible with your Hipay account(s).').'</p>
-				<input type="submit" name="submitHipay" value="'.$this->l('Update configuration').'" class="button" style="font-weight:bold;"/>
-			</form>
-
-				</td>
-			</tr>
-			<tr>
-				<td><img src="../modules/'.$this->name.'/3.png" alt="step 3" /></td>
-				<td class="tab2">'.$this->l('Choose a set of buttons for your shop Hipay').' :</td>
-			</tr>
-			<tr>
-				<td></td>
-				<td>
-					<form action="'.$currentIndex.'&configure='.$this->name.'&token='.Tools::safeOutput(Tools::getValue('token')).'" method="post">
-						<table>
-							<tr>
-								<td>
-									<input type="radio" name="payment_button" id="payment_button_be" value="be" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'be' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_be"><img src="../modules/'.$this->name.'/payment_button/BE.png" /></label>
-								</td>
-								<td style="padding-left: 40px;">
-									<input type="radio" name="payment_button" id="payment_button_de" value="de" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'de' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_de"><img src="../modules/'.$this->name.'/payment_button/DE.png" /></label>
-								</td>
-							</tr>
-							<tr>
-								<td>
-									<input type="radio" name="payment_button" id="payment_button_fr" value="fr" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'fr' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_fr"><img src="../modules/'.$this->name.'/payment_button/FR.png" /></label>
-								</td>
-								<td style="padding-left: 40px;">
-									<input type="radio" name="payment_button" id="payment_button_gb" value="gb" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'gb' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_gb"><img src="../modules/'.$this->name.'/payment_button/GB.png" /></label>
-								</td>
-							</tr>
-							<tr>
-								<td>
-									<input type="radio" name="payment_button" id="payment_button_it" value="it" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'it' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_it"><img src="../modules/'.$this->name.'/payment_button/IT.png" /></label>
-								</td>
-								<td style="padding-left: 40px;">
-									<input type="radio" name="payment_button" id="payment_button_nl" value="nl" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'nl' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_nl"><img src="../modules/'.$this->name.'/payment_button/NL.png" /></label>
-								</td>
-							</tr>
-							<tr>
-								<td>
-									<input type="radio" name="payment_button" id="payment_button_pt" value="pt" '.(Configuration::get('HIPAY_PAYMENT_BUTTON') == 'pt' ? 'checked="checked"' : '').'/>
-								</td>
-								<td>
-									<label style="width: auto" for="payment_button_pt"><img src="../modules/'.$this->name.'/payment_button/PT.png" /></label>
-								</td>
-							</tr>
-						</table>
-						<input type="submit" name="submitHipayPaymentButton" value="'.$this->l('Update configuration').'" class="button" style="font-weight:bold;" />
-					</form>
-				</td>
-			</tr>
-		</table>
-		<script type="text/javascript">
-			function loadWebsiteTopic()
-			{
-				var locale = "'.$this->formatLanguageCode(Context::getContext()->language->iso_code).'";
-				var business_line = $("#business-line").val();
-				$.ajax(
-				{
-					type: "POST",
-					url: "'.__PS_BASE_URI__.'modules/hipay/ajax_websitetopic.php",
-					data:
-					{
-						locale: locale,
-						business_line: business_line,
-						token: "'.substr(Tools::encrypt('hipay/websitetopic'), 0, 10).'"
-					},
-					success: function(result)
-					{
-						$("#website-topic").html(result);
-					}
-				});
-			}
-			$("#business-line").change(function() { loadWebsiteTopic() });
-			loadWebsiteTopic();
-		</script>
-		</fieldset>
-		<br />
-		';
-
-		$form .= '
-		<fieldset>
-			<legend><img src="../modules/'.$this->name.'/logo.gif" /> '.$this->l('Zones restrictions').'</legend>
-			'.$this->l('Select the authorized shipping zones').' :<br /><br />
-			<form action="'.$currentIndex.'&configure=hipay&token='.Tools::safeOutput(Tools::getValue('token')).'" method="post">
-				<table cellspacing="0" cellpadding="0" class="table">
-					<tr>
-						<th class="center">'.$this->l('ID').'</th>
-						<th>'.$this->l('Zones').'</th>
-						<th align="center"><img src="../modules/'.$this->name.'/logo.gif" /></th>
-					</tr>
-		';
-
-		$result = Db::getInstance()->ExecuteS('
-			SELECT `id_zone`, `name`
-			FROM '._DB_PREFIX_.'zone
-			WHERE `active` = 1
-		');
-
-		foreach ($result as $rowNumber => $rowValues)
-		{
-			$form .= '<tr>';
-			$form .= '<td>'.$rowValues['id_zone'].'</td>';
-			$form .= '<td>'.$rowValues['name'].'</td>';
-			$chk = null;
-			if (Configuration::get('HIPAY_AZ_'.$rowValues['id_zone']) == 'ok')
-				$chk = "checked ";
-
-			$form .= '<td align="center"><input type="checkbox" name="HIPAY_AZ_'.$rowValues['id_zone'].'" value="ok" '.$chk.'/>';
-			$form .= '<input type="hidden" name="HIPAY_AZ_ALL_'.$rowValues['id_zone'].'" value="ok" /></td>';
-			$form .= '</tr>';
-		}
-
-		$form .= '
-				</table><br>
-				<input type="submit" name="submitHipayAZ" value="'.$this->l('Update zones').'" class="button" style="font-weight:bold;" />
-			</form>
-		</fieldset>
-		<script type="text/javascript">
-			function switchHipayAccount(prod) {
-				if (prod)
-				{';
-		foreach ($currencies as $currency)
-			$form .= '
-					$("#HIPAY_ACCOUNT_'.$currency['iso_code'].'").css("background-color", "#FFFFFF");
-					$("#HIPAY_PASSWORD_'.$currency['iso_code'].'").css("background-color", "#FFFFFF");
-					$("#HIPAY_SITEID_'.$currency['iso_code'].'").css("background-color", "#FFFFFF");';
-		$form .= '	$(".hipay_prod").css("background-color", "#AADEAA");
-					$(".hipay_test").css("background-color", "transparent");
-					$(".hipay_prod_span").css("font-weight", "700");
-					$(".hipay_test_span").css("font-weight", "200");
-				}
-				else
-				{';
-		foreach ($currencies as $currency)
-			$form .= '
-					$("#HIPAY_ACCOUNT_'.$currency['iso_code'].'").css("background-color", "#EEEEEE");
-					$("#HIPAY_PASSWORD_'.$currency['iso_code'].'").css("background-color", "#EEEEEE");
-					$("#HIPAY_SITEID_'.$currency['iso_code'].'").css("background-color", "#EEEEEE");';
-		$form .= '	$(".hipay_prod").css("background-color", "transparent");
-					$(".hipay_test").css("background-color", "#AADEAA");
-					$(".hipay_prod_span").css("font-weight", "200");
-					$(".hipay_test_span").css("font-weight", "700");
-				}
-			}
-			switchHipayAccount('.(int)$this->env.');';
-
-		if (class_exists('SoapClient'))
-		{
-			$form .= '
-				$(\'#account_creation\').click(function() {
-					$(\'#account_creation_form\').show();
-					return false;
-				});
-			';
-		}
-
-		$form .= '
-		</script>';
-
-		if ($this->ws_client == false)
-			return $this->displayError('To work properly the module need the Soap library to be installed.').$form;
-		return $form;
-	}
-
-	public static function getWsClient()
-	{
-		$ws_client = null;
-		if (class_exists('SoapClient'))
-		{
-			if (is_null($ws_client))
-			{
-				$options = array(
-					'location' => self::WS_URL,
-					'uri' => self::WS_SERVER
-				);
-				$ws_client = new SoapClient(null, $options);
-			}
-			return $ws_client;
-		}
-		return false;
-	}
-
-	protected function getFormValues()
-	{
-		$values = array();
-
-		if (Tools::isSubmit('email'))
-			$values['email'] = Tools::getValue('email');
-		else
-			$values['email'] = Configuration::get('PS_SHOP_EMAIL');
-
-		if (Tools::isSubmit('firstname'))
-			$values['firstname'] = Tools::getValue('firstname');
-		else
-			$values['firstname'] = Context::getContext()->employee->firstname;
-
-		if (Tools::isSubmit('lastname'))
-			$values['lastname'] = Tools::getValue('lastname');
-		else
-			$values['lastname'] = Context::getContext()->employee->lastname;
-
-		$values['currency'] = Tools::getValue('currency');
-
-		if (Tools::isSubmit('contact-email'))
-			$values['contact_email'] = Tools::getValue('contact-email');
-		else
-			$values['contact_email'] = Configuration::get('PS_SHOP_EMAIL');
-
-		if (Tools::isSubmit('website-name'))
-			$values['website_name'] = Tools::getValue('website-name');
-		else
-			$values['website_name'] = Configuration::get('PS_SHOP_NAME');
-
-		if (Tools::isSubmit('website-url'))
-			$values['website_url'] = Tools::getValue('website-url');
-		else
-			$values['website_url'] = Configuration::get('PS_SHOP_DOMAIN');
-
-		$values['business_line'] = Tools::getValue('business-line');
-
-		$values['password'] = Tools::getValue('website-password');
-
-		return $values;
-	}
-
-	protected function getBusinessLine()
-	{
-		try
-		{
-			$iso_lang = Context::getContext()->language->iso_code;
-			$format_language = $this->formatLanguageCode($iso_lang);
-
-			if ($this->ws_client !== false)
-				$business_line = $this->ws_client->getBusinessLine($format_language);
-		}
-		catch (Exception $e)
-		{
-			return array();
-		}
-
-		if (isset($business_line) && ($business_line !== false))
-			return $business_line;
-		return array();
-	}
-
-	protected function processAccountCreation(&$form_errors)
-	{
-		$form_values = $this->getFormValues();
-
-		// STEP 1: Check if the email is available in Hipay
-		try
-		{
-			if ($this->ws_client !== false)
-				$is_available = $this->ws_client->isAvailable($form_values['email']);
-		}
-		catch (Exception $e)
-		{
-			$form_errors = $this->l('Could not connect to host');
-			return false;
-		}
-
-		if (!$is_available)
-		{
-			$form_errors = $this->l('An account already exists with this email address');
-			return false;
-		}
-
-		// STEP 2: Account creation
-		try
-		{
-			if ($this->ws_client !== false)
-				$return = $this->ws_client->createWithWebsite(
-					array(
-						'email' => $form_values['email'],
-						'firstname' => $form_values['firstname'],
-						'lastname' => $form_values['lastname'],
-						'currency' => $form_values['currency'],
-						'locale' => $this->formatLanguageCode(Context::getContext()->language->language_code),
-						'ipAddress' => $_SERVER['REMOTE_ADDR'],
-						'websiteBusinessLineId' => $form_values['business_line'],
-						'websiteTopicId' => Tools::getValue('website-topic'),
-						'websiteContactEmail' => $form_values['contact_email'],
-						'websiteName' => $form_values['website_name'],
-						'websiteUrl' => $form_values['website_url'],
-						'websiteMerchantPassword' => $form_values['password']
-				));
-		}
-		catch (Exception $e)
-		{
-			$form_errors = $this->l('Could not connect to host');
-			return false;
-		}
-
-		if ($return !== false)
-		{
-			if ($return['error'] == 0)
-			{
-				Configuration::updateValue('HIPAY_ACCOUNT_'.$form_values['currency'], $return['account_id']);
-				Configuration::updateValue('HIPAY_PASSWORD_'.$form_values['currency'], Tools::getValue('website-password'));
-				Configuration::updateValue('HIPAY_SITEID_'.$form_values['currency'], $return['site_id']);
-				return true;
-			}
-
-			if ($return['code'] == 1)
-			{
-				$fields = array(
-					'firstname' => $this->l('firstname'),
-					'lastname' => $this->l('lastname'),
-					'email' => $this->l('email'),
-					'currency' => $this->l('currency'),
-					'websiteBusinessLineId' => $this->l('business line'),
-					'websiteTopicId' => $this->l('website topic'),
-					'websiteContactEmail' => $this->l('website contact email'),
-					'websiteName' => $this->l('website name'),
-					'websiteUrl' => $this->l('website url'),
-					'websiteMerchantPassword' => $this->l('website merchant password'),
-				);
-				$fieldnames_error = array();
-				foreach ($return['vars'] as $fieldtype)
-					if(isset($fields[$fieldtype]))
-						$fieldnames_error[] = $fields[$fieldtype];
-
-				$form_errors = sprintf($this->l('Some fields are not correct. Please check the fields: %s'), implode(', ', $fieldnames_error));
-				return false;
-			}
-			elseif ($return['code'] == 2)
-			{
-				$form_errors = sprintf($this->l('An error occurs durring the account creation: %s'), Tools::htmlentitiesUTF8($return['description']));
-				return false;
-			}
-		}
-			$form_errors = $this->l('Unknow error');
-			return false;
-	}
-
-	private function getHipayCategories($hipaySiteId, $hipayAccountId)
-	{
-		try
-		{
-			if ($this->ws_client !== false)
-				return $this->ws_client->getCategoryList(array('site_id' => $hipaySiteId, 'account_id' => $hipayAccountId));
-		}
-		catch (Exception $e)
-		{
-			return array();
-		}
-		return array();
-	}
-
-	// Retro compatibility with 1.2.5
-	static private function MysqlGetValue($query)
-	{
-		$row = Db::getInstance()->getRow($query);
-		return array_shift($row);
-	}
-	#
-	# Patch pour logger la validation.php - appel entre HiPay et Prestashop
-	# Le 16/11/2015 par Johan PROTIN (jprotin at hipay dot com)
-	#
-	private function HipayLog($msg){
-		if(HIPAY_LOG){
-			$fp = fopen(_PS_ROOT_DIR_.'/log/hipay/hipaylogs.txt','a+');
-	        fseek($fp,SEEK_END);
-	        fputs($fp,$msg);
-	        fclose($fp);
-		}        
-	}
+	 * @welcome_message_shown boolean
+     */
+    public function getConfigHiPay()
+    {
+    	// the config is stacked in JSON
+    	return json_decode(Configuration::get('HIPAY_CONFIG'));
+    }
+    public function setConfigHiPay($key, $value)
+    {
+    	// the config is stacked in JSON
+    	$this->configHipay->$key =$value;
+    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
+    }
+    public function setAllConfigHiPay()
+    {
+    	// the config is stacked in JSON
+    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
+    }
 }

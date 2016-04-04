@@ -1,0 +1,19 @@
+{
+  "name": "prestashop/hipay",
+  "description": "PrestaShop module for the payment HiPay",
+  "homepage": "https://github.com/PrestaShop/hipay",
+  "license": "Apache 2.0 License",
+  "authors": [
+    {
+      "name": "HiPay",
+      "email": "support.wallet@hipay.com"
+    }
+  ],
+  "require": {
+    "php": ">=5.3.2"
+  },
+  "config": {
+    "preferred-install": "dist"
+  },
+  "type": "prestashop-module"
+}

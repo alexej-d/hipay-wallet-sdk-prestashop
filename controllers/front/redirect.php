@@ -1,51 +1,54 @@
 <?php
-/*
-* 2007-2015 PrestaShop 
+/**
+* 2015 HiPay
 *
 * NOTICE OF LICENSE
 *
-* This source file is subject to the Academic Free License (AFL 3.0)
-* that is bundled with this package in the file LICENSE.txt.
-* It is also available through the world-wide-web at this URL:
-* http://opensource.org/licenses/afl-3.0.php
-* If you did not receive a copy of the license and are unable to
-* obtain it through the world-wide-web, please send an email
-* to license@prestashop.com so we can send you a copy immediately.
 *
-* DISCLAIMER
+* @author    HiPay <support.wallet@hipay.com>
+* @copyright 2015 HiPay
+* @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
-* Do not edit or add to this file if you wish to upgrade PrestaShop to newer
-* versions in the future. If you wish to customize PrestaShop for your
-* needs please refer to http://www.prestashop.com for more information.
-*
-*  @author PrestaShop SA <contact@prestashop.com>
-*  @copyright  2007-2011 PrestaShop SA
-*  @license    http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
-*  International Registered Trademark & Property of PrestaShop SA
 */
-
-/**
- * @since 1.5.0
- */
 
 class HipayRedirectModuleFrontController extends ModuleFrontController
 {
-	public $display_column_left = false;
-	
-	public function __construct()
-	{
-		parent::__construct();
-		$this->display_column_left = false;
-	}
+    public function postProcess()
+    {
+        $currency = $this->context->currency;
 
-	public function initContent()
-	{
-		parent::initContent();
-		if (!Context::getContext()->customer)
-			Tools::redirect('index.php?controller=authentication&back=order.php');
-		$hipay = Module::getInstanceByName('hipay');
-		if (Validate::isLoadedObject($hipay))
-			if ($hipay->payment() === false)
-				return $this->setTemplate('redirect.tpl');
-	}
+        if ($this->module->isSupportedCurrency($currency->iso_code) == false) {
+            return $this->displayError('The currency is not supported');
+        }
+
+        $this->generatePayment();
+    }
+
+    protected function generatePayment()
+    {
+        require_once(dirname(__FILE__).'/../../classes/webservice/HipayPayment.php');
+
+        $results = null;
+        $payment = new HipayPayment($this->module);
+
+        if ($payment->generate($results) == false) {
+            $description = $results->generateResult->description;
+            $this->displayError('An error occurred while getting transaction informations', $description);
+        }
+    }
+
+    protected function displayError($message, $description = false)
+    {
+        $this->context->smarty->assign('path', '
+            <a href="'.$this->context->link->getPageLink('order', null, null, 'step=3').'">'.$this->module->l('Order').'</a>
+            <span class="navigation-pipe">&gt;</span>'.$this->module->l('Error'));
+
+        $this->errors[] = $this->module->l($message);
+
+        if ($description != false) {
+            $this->errors[] = $description;
+        }
+
+        return $this->setTemplate('error.tpl');
+    }
 }

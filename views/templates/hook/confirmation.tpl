@@ -17,16 +17,26 @@
 * versions in the future. If you wish to customize PrestaShop for your
 * needs please refer to http://www.prestashop.com for more information.
 *
-*  @author PrestaShop SA <contact@prestashop.com>
-*  @copyright  2007-2015 PrestaShop SA
-*  @license    http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
-*  International Registered Trademark & Property of PrestaShop SA
+* @author    PrestaShop SA <contact@prestashop.com>
+* @copyright 2007-2015 PrestaShop SA
+* @license   http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
+* International Registered Trademark & Property of PrestaShop SA
 *}
 
+{if (isset($status) == true) && ($status == 'ok')}
+<h3>{l s='Your order on %s is complete.' sprintf=$shop_name mod='hipay'}</h3>
 <p>
-	{l s='Your order on' mod='hipay'} <span class="bold">{$shop_name|escape:'htmlall':'UTF-8'}</span> {l s='is complete.' mod='hipay'}
-	<br /><br />
-	{l s='You have chosen the HiPay method.' mod='hipay'}
-	<br /><br /><span class="bold">{l s='Your order will be sent very soon.' mod='hipay'}</span>
-	<br /><br />{l s='For any questions or for further information, please contact our' mod='hipay'} <a href="{$link->getPageLink('contact', true)}" target="_blank">{l s='customer support' mod='hipay'}</a>.
+	<br />- {l s='Amount' mod='hipay'} : <span class="price"><strong>{$total|escape:'htmlall':'UTF-8'}</strong></span>
+	<br />- {l s='Reference' mod='hipay'} : <span class="reference"><strong>{$reference|escape:'html':'UTF-8'}</strong></span>
+	<br /><br />{l s='An email has been sent with this information.' mod='hipay'}
+	<br /><br />{l s='If you have questions, comments or concerns, please contact our' mod='hipay'} <a href="{$link->getPageLink('contact', true)|escape:'html':'UTF-8'}">{l s='expert customer support team.' mod='hipay'}</a>
 </p>
+{else}
+<h3>{l s='Your order on %s has not been accepted.' sprintf=$shop_name mod='hipay'}</h3>
+<p>
+	<br />- {l s='Reference' mod='hipay'} <span class="reference"> <strong>{$reference|escape:'html':'UTF-8'}</strong></span>
+	<br /><br />{l s='Please, try to order again.' mod='hipay'}
+	<br /><br />{l s='If you have questions, comments or concerns, please contact our' mod='hipay'} <a href="{$link->getPageLink('contact', true)|escape:'html':'UTF-8'}">{l s='expert customer support team.' mod='hipay'}</a>
+</p>
+{/if}
+<hr />
