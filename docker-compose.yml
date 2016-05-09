@@ -1,0 +1,7 @@
+web:
+  build: .
+  container_name: hipay-direct-prestashop
+  ports:
+    - "8085:80"
+  env_file:
+    - env
