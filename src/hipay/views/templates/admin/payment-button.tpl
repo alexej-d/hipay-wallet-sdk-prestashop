@@ -9,3 +9,6 @@
 * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 *}
+<div class="hipay-payment-button">
+PAYMENT BUTTON
+</div>

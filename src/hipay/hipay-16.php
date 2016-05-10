@@ -1,6 +1,6 @@
 <?php
 /**
-* 2015 HiPay
+* 2016 HiPay
 *
 * NOTICE OF LICENSE
 *
@@ -86,9 +86,8 @@ class Hipay extends PaymentModule
 
         if (!Configuration::get('HIPAY_CONFIG')) {
             $this->warning = $this->l('Please, do not forget to configure your module');
-        }else{
-            $this->configHipay = $this->getConfigHiPay();
-        }      
+        }
+        $this->configHipay = $this->getConfigHiPay();     
     }
 
     public function install()
@@ -151,6 +150,7 @@ class Hipay extends PaymentModule
     public function installHipay()
     {
 		$return = $this->setCurrencies() &&
+                    $this->insertConfigHiPay() &&
 		            $this->installAdminTab() &&
 		            $this->updateHiPayOrderStates() &&
 		            $this->registerHook('header') &&
@@ -232,7 +232,7 @@ class Hipay extends PaymentModule
         $this->postProcess($user_account);
 
         // Generate configuration forms
-        if ($this->configHipay->user_mail) {
+        if (!empty($this->configHipay->user_mail)) {
             $amount_limit = 1000;
 
             $accounts = $user_account->getBalances();
@@ -260,6 +260,9 @@ class Hipay extends PaymentModule
                 $this->context->smarty->assign('welcome_message', true);
             }
         } else {
+            // init datepicker js and ui for birth date
+            $this->context->controller->addJqueryUI('ui.datepicker');
+
             $complete_form = $this->shouldDisplayCompleteLoginForm($user_account);
 
             $this->context->smarty->assign(array(
@@ -411,7 +414,6 @@ class Hipay extends PaymentModule
     protected function postProcess($user_account)
     {
         $this->context->smarty->assign('sandbox', $this->configHipay->sandbox_mode);
-
         if (Tools::isSubmit('submitSandboxMode')) {
             $this->context->smarty->assign('active_tab', 'sandbox');
             return $this->switchSandboxMode();
@@ -775,8 +777,13 @@ class Hipay extends PaymentModule
      */
     public function getConfigHiPay()
     {
-    	// the config is stacked in JSON
-    	return json_decode(Configuration::get('HIPAY_CONFIG'));
+        $confHipay = Configuration::get('HIPAY_CONFIG');
+        // if config exist but empty, init new object for configHipay
+        if(!$confHipay || empty($confHipay)){
+            $this->insertConfigHiPay();
+        }
+        // not empty in bdd and the config is stacked in JSON
+        return json_decode(Configuration::get('HIPAY_CONFIG'));    	
     }
     public function setConfigHiPay($key, $value)
     {
@@ -784,9 +791,31 @@ class Hipay extends PaymentModule
     	$this->configHipay->$key =$value;
     	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
     }
-    public function setAllConfigHiPay()
+    public function setAllConfigHiPay($objHipay = null)
     {
+        if($objHipay != null){
+            $for_json_hipay = $objHipay;
+        }else{
+            $for_json_hipay = $this->configHipay;
+        }
     	// the config is stacked in JSON
-    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
+    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($for_json_hipay)); 
+    }
+    public function insertConfigHiPay()
+    {
+        // init objet config for HiPay
+        $objHipay = new StdClass();
+        $objHipay->user_mail                   = '';
+        $objHipay->sandbox_mode                = false;
+        $objHipay->sandbox_user_account_id     = '';
+        $objHipay->sandbox_website_id          = '';
+        $objHipay->sandbox_ws_login            = '';
+        $objHipay->sandbox_ws_password         = '';
+        $objHipay->production_user_account_id  = '';
+        $objHipay->production_website_id       = '';
+        $objHipay->production_ws_login         = '';
+        $objHipay->production_ws_password      = '';
+        $objHipay->welcome_message_shown       = false;
+        return $this->setAllConfigHiPay($objHipay);
     }
 }

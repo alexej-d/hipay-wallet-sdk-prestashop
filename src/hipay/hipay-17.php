@@ -1,6 +1,6 @@
 <?php
 /**
-* 2015 HiPay
+* 2016 HiPay
 *
 * NOTICE OF LICENSE
 *
@@ -89,12 +89,7 @@ class Hipay extends PaymentModule
         if (!Configuration::get('HIPAY_CONFIG')) {
             $this->warning = $this->l('Please, do not forget to configure your module');
         }
-        if( $this->configHipay && empty($this->configHipay) ){
-            $this->configHipay = '{"sandbox_mode":false,"user_mail":"","production_website_id":"","production_ws_login":"","production_ws_password":"","production_user_account_id":"","sandbox_website_id":"","sandbox_ws_login":"","sandbox_ws_password":"","sandbox_user_account_id":"","welcome_message_shown":true}';
-            $this->setAllConfigHiPay();
-        }elseif( $this->configHipay && !empty($this->configHipay) ){
-            $this->configHipay = $this->getConfigHiPay();
-        }        
+        $this->configHipay = $this->getConfigHiPay();        
     }
 
     public function install()
@@ -156,7 +151,8 @@ class Hipay extends PaymentModule
 
     public function installHipay()
     {
-		$return = $this->setCurrencies() &&
+		$return = $this->setCurrencies() &&                    
+                    $this->insertConfigHiPay() &&
 		            $this->installAdminTab() &&
 		            $this->updateHiPayOrderStates() &&
 		            $this->registerHook('header') &&
@@ -848,34 +844,61 @@ class Hipay extends PaymentModule
 
     /*
      * Function to get the module configuration
- 	 * @user_mail	
+     * @user_mail   
      * @sandbox_mode boolean
      * @sandox_user_account_id integer
-	 * @sandbox_website_id integer
-	 * @sandbox_ws_login varchar
-	 * @sandbox_ws_password varchar
+     * @sandbox_website_id integer
+     * @sandbox_ws_login varchar
+     * @sandbox_ws_password varchar
      * 
      * @production_user_account_id integer
-	 * @production_website_id integer
-	 * @production_ws_login varchar
-	 * @production_ws_password varchar
-	 *
-	 * @welcome_message_shown boolean
+     * @production_website_id integer
+     * @production_ws_login varchar
+     * @production_ws_password varchar
+     *
+     * @welcome_message_shown boolean
      */
     public function getConfigHiPay()
     {
-    	// the config is stacked in JSON
-    	return json_decode(Configuration::get('HIPAY_CONFIG'));
+        $confHipay = Configuration::get('HIPAY_CONFIG');
+        // if config exist but empty, init new object for configHipay
+        if(!$confHipay || empty($confHipay)){
+            $this->insertConfigHiPay();
+        }
+        // not empty in bdd and the config is stacked in JSON
+        return json_decode(Configuration::get('HIPAY_CONFIG'));     
     }
     public function setConfigHiPay($key, $value)
     {
-    	// the config is stacked in JSON
-    	$this->configHipay->$key =$value;
-    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
+        // the config is stacked in JSON
+        $this->configHipay->$key =$value;
+        return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
     }
-    public function setAllConfigHiPay()
+    public function setAllConfigHiPay($objHipay = null)
     {
-    	// the config is stacked in JSON
-    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
+        if($objHipay != null){
+            $for_json_hipay = $objHipay;
+        }else{
+            $for_json_hipay = $this->configHipay;
+        }
+        // the config is stacked in JSON
+        return Configuration::updateValue('HIPAY_CONFIG', json_encode($for_json_hipay)); 
+    }
+    public function insertConfigHiPay()
+    {
+        // init objet config for HiPay
+        $objHipay = new StdClass();
+        $objHipay->user_mail                   = '';
+        $objHipay->sandbox_mode                = false;
+        $objHipay->sandbox_user_account_id     = '';
+        $objHipay->sandbox_website_id          = '';
+        $objHipay->sandbox_ws_login            = '';
+        $objHipay->sandbox_ws_password         = '';
+        $objHipay->production_user_account_id  = '';
+        $objHipay->production_website_id       = '';
+        $objHipay->production_ws_login         = '';
+        $objHipay->production_ws_password      = '';
+        $objHipay->welcome_message_shown       = false;
+        return $this->setAllConfigHiPay($objHipay);
     }
 }
