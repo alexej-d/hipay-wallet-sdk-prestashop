@@ -9,6 +9,4 @@
 * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 *}
-<div class="hipay-register">
-REGISTER
-</div>
+{$register_form}

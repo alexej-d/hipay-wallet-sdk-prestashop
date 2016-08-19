@@ -9,7 +9,6 @@
 * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 *}
-
 <dl id="faq_q_a">
     <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq1" aria-expanded="true" aria-controls="faq1"><i class="icon icon-question-circle"></i> {l s='In which countries can I use PrestaShop Payments by HiPay?' mod='hipay'}</dt>
     <dd id="faq1" class="panel-collapse collapse">

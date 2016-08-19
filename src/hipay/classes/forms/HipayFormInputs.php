@@ -41,8 +41,9 @@ abstract class HipayFormInputs {
     {
         return $this->generateInputText($name, $title, array(
             'required' => true,
-            'desc' => $description,
+            'hint' => $description,
             'placeholder' => $this->module->l('email@domain.com'),
+            'class' => 'fixed-width-xxl',
         ));
     }
 
@@ -54,6 +55,16 @@ abstract class HipayFormInputs {
     protected function generateInputText($name, $label = false, $params = array())
     {
         return $this->generateInput('text', $name, $label, $params);
+    }
+
+     protected function generateInputSelect($name, $label = false, $params = array())
+    {
+        return $this->generateInput('select', $name, $label, $params);
+    }
+
+    protected function generateInputTextarea($name, $label = false, $params = array())
+    {
+        return $this->generateInput('textarea', $name, $label, $params);
     }
 
     public function generateLegend($title, $icon = false)

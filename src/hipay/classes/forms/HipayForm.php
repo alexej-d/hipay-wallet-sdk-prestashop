@@ -64,19 +64,19 @@ class HipayForm extends HipayFormInputs {
     public function getLoginForm($complete_form = false)
     {
         $this->helper->tpl_vars['fields_value'] = $this->getLoginFormValues();
-
-        $form['form']['input'][] = $this->generateInputEmail('install_user_email', $this->module->l('Email', 'HipayForm'), $this->module->l('Please, enter your email address in the field above', 'HipayForm'));
+        // WS Login
         $form['form']['input'][] = $this->generateInputText('install_ws_login', $this->module->l('WS Login', 'HipayForm'), array(
             'class' => 'fixed-width-xxl',
             'hint' => $this->module->l('You can find it on your HiPay account, section "Integration > API", under "Webservice access"', 'HipayForm'),
             'required' => true,
         ));
+        // WS Password
         $form['form']['input'][] = $this->generateInputText('install_ws_password', $this->module->l('WS Password', 'HipayForm'), array(
             'class' => 'fixed-width-xxl',
             'hint' => $this->module->l('You can find it on your HiPay account, section "Integration > API", under "Webservice access"', 'HipayForm'),
             'required' => true,
         ));
-
+        // Button actions
         $form['form']['buttons'][] = $this->generateSubmitButton($this->module->l('Reset', 'HipayForm'), array(
             'class' => 'pull-left',
             'name' => 'submitReset',
@@ -108,52 +108,37 @@ class HipayForm extends HipayFormInputs {
     {
         $this->helper->tpl_vars['fields_value'] = $this->getRegisterFormValues();
 
+        // email
         $form['form']['input'][] = $this->generateInputEmail(
             'register_user_email', 
             $this->module->l('Email', 'HipayForm'), 
-            $this->module->l('Please, enter your email address in the field above', 'HipayForm')
-        );
-        // field civility
-        $options = array();
-        foreach (Gender::getGenders((int)Context::getContext()->language->id) as $gender)
-        {
-            $options[] = array(
-                "id_option"    => (int)$gender->id,
-                "name"  => $gender->name
-            );
-        }
-        $form['form']['select'][] = array(
-            'type'      => 'select',                             
-            'label'     => $this->module->l('Civility', 'HipayForm'),        
-            'desc'      => $this->module->l('Choose your civility', 'HipayForm'), 
-            'name'      => 'register_civility',                    
-            'required'  => true,                             
-            'options'   => array(
-                'query'     => $options,                          
-                'id'        => 'id_option',                          
-                'name'      => 'name'                              
+            $this->module->l('Please, enter your email address in the field above', 'HipayForm'),
+            array(
+                'class' => 'fixed-width-xxl',
             )
         );
-        $this->generateInputText('register_firstname', $this->module->l('Firstname', 'HipayForm'), array(
+        // First name
+        $form['form']['input'][] = $this->generateInputText('register_firstname', $this->module->l('Firstname', 'HipayForm'), array(
             'class' => 'fixed-width-xxl',
             'hint' => $this->module->l('Please, enter your firstname in the field above', 'HipayForm'),
             'required' => true,
         ));
-        $this->generateInputText('register_lastname', $this->module->l('Lastname', 'HipayForm'), array(
+        // Last name
+        $form['form']['input'][] = $this->generateInputText('register_lastname', $this->module->l('Lastname', 'HipayForm'), array(
             'class' => 'fixed-width-xxl',
             'hint' => $this->module->l('Please, enter your lastname in the field above', 'HipayForm'),
             'required' => true,
         ));
-        $form['form']['input'][] = array(
-                'type' => 'date',
-                'label' => $this->l('Birth date', 'HipayForm'),
-                'name' => 'register_birth_date',
-                'size' => 10,
-                'required' => true,
-                'desc' => $this->l('Please, select your birth date', 'HipayForm'),
-            );
-        );
-        // TODO
+        // BUTTON Reset & Save
+        $form['form']['buttons'][] = $this->generateSubmitButton($this->module->l('Reset', 'HipayForm'), array(
+            'class' => 'pull-left',
+            'name' => 'submitReset',
+            'icon' => 'process-icon-eraser',
+        ));
+        $form['form']['buttons'][] = $this->generateSubmitButton($this->module->l('Sign up', 'HipayForm'), array(
+            'name' => 'submitRegister',
+            'icon' => 'process-icon-next',
+        ));
 
         return $this->helper->generateForm(array($form));    
     }
@@ -175,29 +160,20 @@ class HipayForm extends HipayFormInputs {
     {
         $this->helper->tpl_vars['fields_value'] = $this->getSettingsFormValues($user_account);
 
+        $options_rating = array(
+            array('id_option' => 'ALL','name' => $this->module->l('For all ages', 'HipayForm')),
+            array('id_option' => '+12','name' => $this->module->l('For ages 12 and over', 'HipayForm')),
+            array('id_option' => '+16','name' => $this->module->l('For ages 16 and over', 'HipayForm')),
+            array('id_option' => '+18','name' => $this->module->l('For ages 18 and over', 'HipayForm')),
+        );
+
         $form = array('form' => array(
             'input' => array(
-                $this->generateInputFree('info_sandbox_mode', false, array('col' => 12, 'offset' => 0)),
-
-                $this->generateInputFree('main_account_details', false, array('col' => 12, 'offset' => 0)),
-                $this->generateInputFree('main_account_email', $this->module->l('Email', 'HipayForm')),
-                $this->generateInputFree('main_account_shop_name', $this->module->l('Shop name', 'HipayForm')),
-                $this->generateInputFree('main_account_id', $this->module->l('Account ID', 'HipayForm')),
-                $this->generateInputFree('main_account_balance', $this->module->l('Balance', 'HipayForm'), array(
-                    'hint' => $this->module->l('Your account balance is automatically updated after each new transaction', 'HipayForm'),
+                // button switch mode prod/sandbox
+                $this->generateSwitchButton('settings_switchmode', $this->module->l('Use test mode', 'HipayForm'), array(
+                    'hint' => $this->module->l('When in test mode, payment cards are not really charged. Activate this options for testing purposes only.', 'HipayForm'),
                 )),
-
-                $this->generateInputFree('sub_accounts_details', false, array('col' => 12, 'offset' => 0)),
-                $this->generateInputFree('sub_accounts_description', false, array('col' => 12, 'offset' => 0)),
-                $this->generateInputFree('sub_accounts_values', false, array('col' => 12, 'offset' => 0)),
-            ),
-            'buttons' => array(
-                $this->generateSubmitButton($this->module->l('Log out', 'HipayForm'), array(
-                    'name' => 'submitReset',
-                    'icon' => 'process-icon-power',
-                    'js' => 'return confirm(\''.$this->module->l('Are you sure you want to log out?', 'HipayForm').'\');',
-                )),
-            ),
+            )
         ));
 
         return $this->helper->generateForm(array($form));

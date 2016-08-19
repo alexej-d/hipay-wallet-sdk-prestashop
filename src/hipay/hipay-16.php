@@ -235,23 +235,11 @@ class Hipay extends PaymentModule
         if (!empty($this->configHipay->user_mail)) {
             $amount_limit = 1000;
 
-            $accounts = $user_account->getBalances();
-            $account = $user_account->getMainAccountBalance($accounts);
-
-            if (isset($account->balance)) {
-                $balance_warning = (int)$account->balance > $amount_limit;
-            } else {
-                $balance_warning = false;
-            }
-
             $this->context->smarty->assign(array(
                 'is_logged' => true,
                 'amount_limit' => Tools::displayPrice($amount_limit, $this->context->currency),
-                'balance_warning' => $balance_warning,
-                'sandbox_form' => $form->getSandboxForm(),
-                'services_form' => $form->getCustomersServiceForm($user_account),
-                'settings_form' => $form->getSettingsForm($user_account),
-                'transactions_form' => $form->getTransactionsForm($user_account),
+                'button_form' => 'button form',//$form->getCustomersServiceForm($user_account),
+                'logs' => 'logs',//$form->getTransactionsForm($user_account),
             ));
 
             if ($this->configHipay->welcome_message_shown == false) {
@@ -260,14 +248,12 @@ class Hipay extends PaymentModule
                 $this->context->smarty->assign('welcome_message', true);
             }
         } else {
-            // init datepicker js and ui for birth date
-            $this->context->controller->addJqueryUI('ui.datepicker');
-
             $complete_form = $this->shouldDisplayCompleteLoginForm($user_account);
 
             $this->context->smarty->assign(array(
                 'is_logged' => false,
                 'login_form' => $form->getLoginForm($complete_form),
+                'register_form' => $form->getRegisterForm(),
             ));
         }
 
