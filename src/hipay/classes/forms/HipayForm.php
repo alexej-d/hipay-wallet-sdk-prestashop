@@ -63,7 +63,6 @@ class HipayForm extends HipayFormInputs {
      */
     public function getLoginForm($complete_form = false)
     {
-        $this->helper->tpl_vars['fields_value'] = $this->getLoginFormValues();
         // WS Login
         $form['form']['input'][] = $this->generateInputText('install_ws_login', $this->module->l('WS Login', 'HipayForm'), array(
             'class' => 'fixed-width-xxl',
@@ -88,17 +87,6 @@ class HipayForm extends HipayFormInputs {
         ));
 
         return $this->helper->generateForm(array($form));
-    }
-    /**
-     * Login form values
-     */
-    public function getLoginFormValues()
-    {
-        $email = Configuration::get('PS_SHOP_EMAIL');
-        $values = array(
-            'install_user_email' => Tools::getValue('install_user_email', $email),
-        );
-        return $values;
     }
 
     /**

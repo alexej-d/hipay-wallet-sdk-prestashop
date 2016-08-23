@@ -15,7 +15,8 @@ if (!defined('_PS_VERSION_'))
 
 require_once(dirname(__FILE__).'/classes/forms/HipayForm.php');
 require_once(dirname(__FILE__).'/classes/webservice/HipayUserAccount.php');
-require_once(dirname(__FILE__).'/classes/webservice/HipayWS.php');
+//require_once(dirname(__FILE__).'/classes/webservice/HipayLogs.php');
+require_once(dirname(__FILE__).'/classes/webservice/HipayREST.php');
 
 class Hipay extends PaymentModule
 {
@@ -30,6 +31,8 @@ class Hipay extends PaymentModule
     public $limited_currencies = [];
 
     public $configHipay;
+
+    public $hipay_rating = [];
 
     const PAYMENT_FEED_BASE_LINK = 'https://www.prestashop.com/download/pdf/pspayments/Fees_PSpayments_';
 
@@ -78,6 +81,13 @@ class Hipay extends PaymentModule
             'PLN' => $this->l('Polish złoty'),
             'SEK' => $this->l('Swedish krona'),
             'USD' => $this->l('United States dollar'),
+        ];
+
+        $this->hipay_rating = [
+            ['key' => 'ALL', 'name' => $this->l('For all ages')],
+            ['key' => '+12', 'name' => $this->l('For ages 12 and over')],
+            ['key' => '+16', 'name' => $this->l('For ages 16 and over')],
+            ['key' => '+18', 'name' => $this->l('For ages 18 and over')],
         ];
 
         $this->limited_currencies = array_keys($this->currencies_titles);
@@ -240,6 +250,8 @@ class Hipay extends PaymentModule
                 'amount_limit' => Tools::displayPrice($amount_limit, $this->context->currency),
                 'button_form' => 'button form',//$form->getCustomersServiceForm($user_account),
                 'logs' => 'logs',//$form->getTransactionsForm($user_account),
+                'rating' => $this->hipay_rating,
+                'config_hipay' => $this->configHipay,
             ));
 
             if ($this->configHipay->welcome_message_shown == false) {
@@ -568,36 +580,41 @@ class Hipay extends PaymentModule
 
     protected function login($user_account)
     {
-        $email = Tools::getValue('install_user_email');
-        $is_email = (bool)Validate::isEmail($email);
-
-        $first_name = Tools::getValue('install_user_first_name');
-        $last_name = Tools::getValue('install_user_last_name');
-
-        $website_id = Tools::getValue('install_website_id');
+        // get values login and password
         $ws_login = Tools::getValue('install_ws_login');
         $ws_password = Tools::getValue('install_ws_password');
 
-        if ($is_email == false) {
-            return false;
-        } elseif ($first_name && $last_name) {
-            return $this->createMerchantAccount($email, $first_name, $last_name);
-        } elseif ($website_id && $ws_login && $ws_password) {
-            $is_valid_website_id = (bool)Validate::isInt($website_id);
-            $is_valid_login = (bool)Validate::isMd5($ws_login);
-            $is_valid_password = (bool)Validate::isMd5($ws_password);
+        if ($ws_login && $ws_password) {
+            try {
+                // ctrl if login and password are crypted to md5
+                $is_valid_login = (bool)Validate::isMd5($ws_login);
+                $is_valid_password = (bool)Validate::isMd5($ws_password);
 
-            $this->setConfigHiPay('sandbox_mode', false);
-            if ($is_valid_website_id && $is_valid_login && $is_valid_password) {
-                return $this->registerExistingAccount($email, $website_id, $ws_login, $ws_password);
+                if ($is_valid_login && $is_valid_password) {
+                    $params = [
+                        'ws_login'      => $ws_login,
+                        'ws_password'   => $ws_password,
+                    ];
+                    $user_account = new HipayUserAccount($this);
+                    $account = $user_account->getAccountInfos($params, false);
+                    if (isset($account->code) && ($account->code == 0)) {
+                        $this->setConfigHiPay('sandbox_mode', false);
+                        return $this->registerExistingAccount($account,$params);
+                    } else {
+                        $this->_errors[] = $this->l('Authentication failed!');
+                        $this->clearAccountData();
+                        return false;
+                    }
+                }
+            } catch (Exception $e) {
+                // TODO LOGS
             }
-
             $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
             $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
 
             return false;
         }
-
+        /*
         if ($user_account->isEmailAvailable($email)) {
             // Email available
             $this->_warnings[] = $this->l('To create your PrestaShop Payments by Hipay account, please enter your name and click on Subscribe');
@@ -605,7 +622,7 @@ class Hipay extends PaymentModule
             // Email not available
             $this->_warnings[] = $this->l('You already have an account, please fill the fields below');
         }
-
+        */
         return true;
     }
 
@@ -628,28 +645,42 @@ class Hipay extends PaymentModule
         return false;
     }
 
-    protected function registerExistingAccount($email, $website_id, $ws_login, $ws_password, $sandbox = false)
+    protected function registerExistingAccount($account, $params = [], $sandbox = false)
     {
-        $prefix = $sandbox ? 'sandbox' : 'production';
+        $prefix             = $sandbox ? 'sandbox' : 'production';
+        $user_mail          = '';
+        $website_id         = '';
+        $user_account_id    = '';
+        // get currencies
+        $currencies = Currency::getCurrenciesByIdShop((int)$this->context->shop->id);
+        $selectedCurrencies = [];
+        foreach($currencies as $currency){
+            $selectedCurrencies[$currency['iso_code']] = '';
+        }
+
+        foreach($account->websites as $websiteDefault){
+            $user_mail[$account->currency][$websiteDefault->website_id]         = $websiteDefault->website_email;
+            $website_id[$account->currency][$websiteDefault->website_id]        = $websiteDefault->website_id;
+            $user_account_id[$account->currency][$websiteDefault->website_id]   = $account->user_account_id;
+        }
+        foreach($account->sub_accounts as $sub_account){
+            foreach($sub_account->websites as $website){
+                $user_mail[$sub_account->currency][$website->website_id]        = $website->website_email;
+                $website_id[$sub_account->currency][$website->website_id]       = $website->website_id;
+                $user_account_id[$sub_account->currency][$website->website_id]  = $sub_account->user_account_id;
+            }
+        }
 
         $details = [
-            'user_mail' => $email,
-            $prefix.'_website_id' => $website_id,
-            $prefix.'_ws_login' => $ws_login,
-            $prefix.'_ws_password' => $ws_password,
+            'user_mail'                 => $user_mail,
+            $prefix.'_user_account_id'  => $user_account_id,
+            $prefix.'_website_id'       => $website_id,
+            $prefix.'_ws_login'         => $params['ws_login'],
+            $prefix.'_ws_password'      => $params['ws_password'],
         ];
 
-        $this->saveConfigurationDetails($details);
-
-        $user_account = new HipayUserAccount($this);
-        $account = $user_account->getAccountInfos();
-
-        if (isset($account->code) && ($account->code == 0)) {
-        	$this->setConfigHiPay($prefix.'_user_account_id', $account->userAccountId);
-        } else {
-            $this->_errors[] = $this->l('Authentication failed!');
+        if( $this->saveConfigurationDetails($details)){
             $this->clearAccountData();
-
             return false;
         }
 
@@ -661,7 +692,7 @@ class Hipay extends PaymentModule
         foreach ($details as $name => $value) {
             $this->configHipay->$name = $value;
         }
-        $this->setAllConfigHiPay();
+        return $this->setAllConfigHiPay();
     }
 
     protected function saveTransactionsDateRange()
@@ -760,6 +791,12 @@ class Hipay extends PaymentModule
 	 * @production_ws_password varchar
 	 *
 	 * @welcome_message_shown boolean
+     *
+     * @entity
+     *
+     * @proxyUrl
+     * @proxyLogin
+     * @proxyPassword
      */
     public function getConfigHiPay()
     {
@@ -784,8 +821,11 @@ class Hipay extends PaymentModule
         }else{
             $for_json_hipay = $this->configHipay;
         }
+        // init multistore
+        $id_shop        = (int)$this->context->shop->id;
+        $id_shop_group  = (int)Shop::getContextShopGroupID();
     	// the config is stacked in JSON
-    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($for_json_hipay)); 
+    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($for_json_hipay),false,$id_shop_group,$id_shop);
     }
     public function insertConfigHiPay()
     {
@@ -802,6 +842,11 @@ class Hipay extends PaymentModule
         $objHipay->production_ws_login         = '';
         $objHipay->production_ws_password      = '';
         $objHipay->welcome_message_shown       = false;
+        $objHipay->entity                      = '';
+        $objHipay->proxyUrl                    = '';
+        $objHipay->proxyLogin                  = '';
+        $objHipay->proxyPassword               = '';
+
         return $this->setAllConfigHiPay($objHipay);
     }
 }

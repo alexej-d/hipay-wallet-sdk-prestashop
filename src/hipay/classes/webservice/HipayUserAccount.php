@@ -1,12 +1,12 @@
 <?php
 /**
-* 2015 HiPay
+* 2016 HiPay
 *
 * NOTICE OF LICENSE
 *
 *
 * @author    HiPay <support.wallet@hipay.com>
-* @copyright 2015 HiPay
+* @copyright 2016 HiPay
 * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 */
@@ -14,13 +14,13 @@
 if (!defined('_PS_VERSION_'))
     exit;
 
-require_once(dirname(__FILE__).'/HipayWS.php');
+require_once(dirname(__FILE__).'/HipayREST.php');
 
-class HipayUserAccount extends HipayWS
+class HipayUserAccount extends HipayREST
 {
     protected $accounts_currencies = array();
 
-    protected $client_url = '/soap/user-account-v2';
+    protected $client_url = 'user-account';
 
     protected $module = false;
 
@@ -85,17 +85,18 @@ class HipayUserAccount extends HipayWS
 
         return false;
     }
-
-    public function isEmailAvailable($email, $sandbox_mode = false)
+    // check if email is available in HiPay Direct
+    public function isEmailAvailable($email)
     {
+        $needLogin = false;
         if ( ! is_bool(static::$email_available)) {
-            $result = $this->prestaShopWebservice('/account/available', array(
-                'email' => $email,
-                'sandbox_mode' => (int)$sandbox_mode,
+            $result = $this->sendApiRequest('/is-available', $needLogin, array(
+                'user_email' => $email,
+                'entity' => 'direct',
             ));
-
-            if (isset($result->isAvailable)) {
-                static::$email_available = ! ($result->isAvailable === false);
+            $data = json_decode($result);
+            if (isset($data['is_available'])) {
+                static::$email_available = ! ($data['is_available'] === false);
             } else {
                 return false;
             }
@@ -104,36 +105,18 @@ class HipayUserAccount extends HipayWS
         return static::$email_available;
     }
 
-    public function getAccountInfos()
+    // get user informations saved in HiPay Direct / Wallet with WSlogin and WSpassword
+    public function getAccountInfos($params = [], $needLogin = true)
     {
-        $email = $this->configHipay->user_mail;
-
-        $params = array('accountLogin' => $email);
-        $result = $this->executeQuery('getAccountInfos', $params);
-
-        return ($result->getAccountInfosResult->code === 0) ? $result->getAccountInfosResult : false;
+        $result = $this->sendApiRequest($this->client_url.'/get-infos', $needLogin, $params);
+        return ($result->code === 0) ? $result : false;
     }
 
-    public function getBalances()
-    {
-        $email = $this->configHipay->user_mail;
-        $params = array('wsSubAccountLogin' => $email);
-        $result = $this->executeQuery('getBalance', $params);
-
-        return ($result->getBalanceResult->code === 0) ? $result->getBalanceResult : false;
-    }
-
-    public function getMainAccountBalance($balances)
-    {
-        foreach ($balances->balances->item as $balance) {
-            if (isset($balance->userAccountType) == false) {
-                return false;
-            } elseif ($balance->userAccountType == 'main') {
-                return $balance;
-            }
-        }
-
-        return false;
+    // check if bank info status is validated or not
+    public function getBankInfoStatus(){
+        $needLogin = true;
+        $result = $this->sendApiRequest($this->client_url.'/get-infos', $needLogin);
+        return ($data['code'] === 0) ? $data : false;
     }
 
     public function getTransactions()
