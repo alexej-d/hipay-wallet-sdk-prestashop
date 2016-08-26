@@ -11,13 +11,15 @@
 *}
 
 <div class="panel">
+    <!-- MARKETING START -->
     {* include file marketing.tpl *}
     {include file='./marketing.tpl'}
+    <!-- MARKETING END -->
 </div>
-
+<!-- ALERTS START -->
 {* include file alerts.tpl *}
 {include file='./alerts.tpl'}
-
+<!-- ALERTS END -->
 <div role="tabpanel">
 	<ul class="nav nav-tabs" role="tablist">
 		{if ($is_logged == false)}

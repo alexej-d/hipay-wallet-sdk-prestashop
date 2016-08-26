@@ -29,7 +29,7 @@
 
 #content > * {
     margin: 0 auto;
-    max-width: 900px;
+    max-width: 1024px;
 }
 
 #content > .alert {
@@ -141,9 +141,34 @@ table.form-control-static thead th:last-child {
 }
 
 .form-group {
-    margin-bottom: 5px !important;
+    margin-bottom: 15px !important;
 }
 
 #date-compare {
     display: none !important;
+}
+
+.bootstrap .row { 
+    margin-top: 5px !important;
+    margin-bottom: 10px !important;
+}
+
+.bootstrap .col-md-6 {
+    padding-right: 15px !important;
+    padding-left: 15px !important;
+}
+
+#accounts-currencies td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+}
+
+.trait {
+    border-right-style: solid;
+    border-right-width: 1px;
+    border-right-color: #eeeeee;
+}
+.space {
+    margin-top: 30px !important;
+    margin-bottom: 30px !important;
 }

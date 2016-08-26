@@ -21,7 +21,7 @@
 <hr />
 
 <div id="hipay-content">
-    {if isset($welcome_message)}
+    {if $config_hipay.welcome_message_shown}
         <div class="row">
             <div class="col-md-12 col-xs-12">
                 <p>

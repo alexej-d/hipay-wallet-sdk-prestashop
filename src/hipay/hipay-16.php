@@ -239,26 +239,27 @@ class Hipay extends PaymentModule
         $form = new HipayForm($this);
         $user_account = new HipayUserAccount($this);
 
+        $config_hipay = $this->configHipay;
+
         $this->postProcess($user_account);
 
         // Generate configuration forms
         if (!empty($this->configHipay->user_mail)) {
             $amount_limit = 1000;
 
+            // get currencies
+            $selectedCurrencies = $this->getCurrencies();
+
             $this->context->smarty->assign(array(
-                'is_logged' => true,
-                'amount_limit' => Tools::displayPrice($amount_limit, $this->context->currency),
-                'button_form' => 'button form',//$form->getCustomersServiceForm($user_account),
-                'logs' => 'logs',//$form->getTransactionsForm($user_account),
-                'rating' => $this->hipay_rating,
-                'config_hipay' => $this->configHipay,
+                'is_logged'             => true,
+                'amount_limit'          => Tools::displayPrice($amount_limit, $this->context->currency),
+                'button_form'           => 'button form',//$form->getCustomersServiceForm($user_account),
+                'logs'                  => 'logs',//$form->getTransactionsForm($user_account),
+                'rating'                => $this->hipay_rating,
+                'config_hipay'          => $this->object_to_array($config_hipay),
+                'selectedCurrencies'    => $selectedCurrencies,
             ));
 
-            if ($this->configHipay->welcome_message_shown == false) {
-            	// Set config 
-            	$this->setConfigHiPay('welcome_message_shown',true);
-                $this->context->smarty->assign('welcome_message', true);
-            }
         } else {
             $complete_form = $this->shouldDisplayCompleteLoginForm($user_account);
 
@@ -411,19 +412,16 @@ class Hipay extends PaymentModule
 
     protected function postProcess($user_account)
     {
-        $this->context->smarty->assign('sandbox', $this->configHipay->sandbox_mode);
-        if (Tools::isSubmit('submitSandboxMode')) {
-            $this->context->smarty->assign('active_tab', 'sandbox');
-            return $this->switchSandboxMode();
-        } elseif (Tools::isSubmit('submitReset')) {
+        if (Tools::isSubmit('submitReset')) {
             return $this->clearAccountData();
         } elseif (Tools::isSubmit('submitLogin')) {
             return $this->login($user_account);
-        } elseif (Tools::isSubmit('submitDateRange')) {
-            $this->context->smarty->assign('active_tab', 'transactions');
-            return $this->saveTransactionsDateRange();
+        } elseif (Tools::isSubmit('submitSettings')) {
+            return $this->saveSettingsConfiguration();
+        } elseif (Tools::isSubmit('submitCancel')) {
+            return true;
         }
-    }
+}
 
     public function getLocalizedRatesPDFLink()
     {
@@ -599,6 +597,7 @@ class Hipay extends PaymentModule
                     $account = $user_account->getAccountInfos($params, false);
                     if (isset($account->code) && ($account->code == 0)) {
                         $this->setConfigHiPay('sandbox_mode', false);
+                        $this->setConfigHiPay('welcome_message_shown',true);
                         return $this->registerExistingAccount($account,$params);
                     } else {
                         $this->_errors[] = $this->l('Authentication failed!');
@@ -608,6 +607,7 @@ class Hipay extends PaymentModule
                 }
             } catch (Exception $e) {
                 // TODO LOGS
+                $this->_errors[] = $this->l($e->getMessage());
             }
             $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
             $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
@@ -651,13 +651,8 @@ class Hipay extends PaymentModule
         $user_mail          = '';
         $website_id         = '';
         $user_account_id    = '';
-        // get currencies
-        $currencies = Currency::getCurrenciesByIdShop((int)$this->context->shop->id);
-        $selectedCurrencies = [];
-        foreach($currencies as $currency){
-            $selectedCurrencies[$currency['iso_code']] = '';
-        }
 
+        // init array config values by currency
         foreach($account->websites as $websiteDefault){
             $user_mail[$account->currency][$websiteDefault->website_id]         = $websiteDefault->website_email;
             $website_id[$account->currency][$websiteDefault->website_id]        = $websiteDefault->website_id;
@@ -679,7 +674,7 @@ class Hipay extends PaymentModule
             $prefix.'_ws_password'      => $params['ws_password'],
         ];
 
-        if( $this->saveConfigurationDetails($details)){
+        if(!$this->saveConfigurationDetails($details)){
             $this->clearAccountData();
             return false;
         }
@@ -722,7 +717,15 @@ class Hipay extends PaymentModule
 
         return true;
     }
-
+    protected function getCurrencies(){
+        // get currencies
+        $currencies = Currency::getCurrenciesByIdShop((int)$this->context->shop->id);
+        $selectedCurrencies = [];
+        foreach($currencies as $currency){
+            $selectedCurrencies[$currency['iso_code']] = '';
+        }
+        return $selectedCurrencies;
+    }
     protected function shouldDisplayCompleteLoginForm($user_account)
     {
         // If merchant tries to login / subscribe
@@ -739,54 +742,83 @@ class Hipay extends PaymentModule
         return false;
     }
 
-    protected function switchSandboxMode()
+    /*
+     * Save the merchant configuration
+     * @return boolean
+     */
+    protected function saveSettingsConfiguration()
     {
-        $email = $this->configHipay->user_mail;
+        /*
+         * GET VALUES FORM
+         */
+        try{
+            $sandbox_mode           = Tools::getValue('settings_switchmode');
+            $selected_rating        = Tools::getValue('settings_production_rating');
+            $selected_config        = '';
 
-        $sandbox_mode = (bool)Tools::getValue('sandbox_account_mode');
-        $this->setConfigHiPay('sandbox_mode', $sandbox_mode);
-        $this->context->smarty->assign('sandbox', $sandbox_mode);
+            // get currencies
+            $getCurrencies = $this->getCurrencies();
 
-        if ($sandbox_mode) {
-            $sandbox_website_id = Tools::getValue('sandbox_website_id');
-            $sandbox_ws_login = Tools::getValue('sandbox_ws_login');
-            $sandbox_ws_password = Tools::getValue('sandbox_ws_password');
+            // init dynamic values by currency
+            $selectedCurrenciesProd = '';
+            $selectedCurrenciesSandbox = '';
+            foreach($getCurrencies as $key=>$value)
+            {
+                // production
+                $getProductionAccountId = Tools::getValue('settings_production_'.$key.'_user_account_id');
+                $getProductionWebsiteId = Tools::getValue('settings_production_'.$key.'_website_id');
+                $selectedCurrenciesProd[$key] = [
+                    'accountID' => (int)$getProductionAccountId,
+                    'websiteID' => (int)$getProductionWebsiteId,
+                ];
 
-            $is_valid_sandbox_website_id = (bool)Validate::isInt($sandbox_website_id);
-            $is_valid_sandbox_login = (bool)Validate::isMd5($sandbox_ws_login);
-            $is_valid_sandbox_password = (bool)Validate::isMd5($sandbox_ws_password);
-
-            if ($sandbox_mode && $is_valid_sandbox_website_id && $is_valid_sandbox_login && $is_valid_sandbox_password) {
-                $this->registerExistingAccount($email, $sandbox_website_id, $sandbox_ws_login, $sandbox_ws_password, $sandbox_mode);
+                if(Tools::getValue('settings_sandbox_'.$key.'_user_account_id'))
+                {
+                    // sandbox
+                    $getSandboxAccountId = Tools::getValue('settings_sandbox_'.$key.'_user_account_id');
+                    $getSandboxWebsiteId = Tools::getValue('settings_sandbox_'.$key.'_website_id');
+                    $selectedCurrenciesSandbox[$key] = [
+                        'accountID' => (int)$getSandboxAccountId,
+                        'websiteID' => (int)$getSandboxWebsiteId,
+                    ];
+                }
             }
+
+            // init array with all selected informations
+            $selected_config = [
+                'rating'        => $selected_rating,
+                'currencies'    => [
+                    'production' => $selectedCurrenciesProd,
+                    'sandbox'    => $selectedCurrenciesSandbox,
+                ]
+            ];
+
+            // save configuration sandbox mode and select informations
+            $this->setConfigHiPay('sandbox_mode', ($sandbox_mode ? true:false));
+            $this->setConfigHiPay('selected', $selected_config);
+
+            $this->_successes[] = $this->l('configuration saved successfully.');
+
+            return true;
+
+        }catch (Exception $e){
+            // TODO LOGS
+            $this->_errors[] = $this->l($e->getMessage());
         }
-
-        $website_id = Tools::getValue('website_id');
-        $ws_login = Tools::getValue('ws_login');
-        $ws_password = Tools::getValue('ws_password');
-
-        $is_valid_website_id = (bool)Validate::isInt($website_id);
-        $is_valid_login = (bool)Validate::isMd5($ws_login);
-        $is_valid_password = (bool)Validate::isMd5($ws_password);
-
-        if ($is_valid_website_id && $is_valid_login && $is_valid_password) {
-            $this->registerExistingAccount($email, $website_id, $ws_login, $ws_password);
-        }
-
-        return true;
+        return false;
     }
-    
+
     /*
      * Function to get the module configuration
- 	 * @user_mail	
+ 	 * @user_mail array
      * @sandbox_mode boolean
-     * @sandox_user_account_id integer
-	 * @sandbox_website_id integer
+     * @sandox_user_account_id array
+	 * @sandbox_website_id array
 	 * @sandbox_ws_login varchar
 	 * @sandbox_ws_password varchar
      * 
-     * @production_user_account_id integer
-	 * @production_website_id integer
+     * @production_user_account_id array
+	 * @production_website_id array
 	 * @production_ws_login varchar
 	 * @production_ws_password varchar
 	 *
@@ -800,19 +832,30 @@ class Hipay extends PaymentModule
      */
     public function getConfigHiPay()
     {
-        $confHipay = Configuration::get('HIPAY_CONFIG');
+        // init multistore
+        $id_shop        = (int)$this->context->shop->id;
+        $id_shop_group  = (int)Shop::getContextShopGroupID();
+        $confHipay = Configuration::get('HIPAY_CONFIG',null, $id_shop_group, $id_shop);
         // if config exist but empty, init new object for configHipay
         if(!$confHipay || empty($confHipay)){
             $this->insertConfigHiPay();
         }
         // not empty in bdd and the config is stacked in JSON
-        return json_decode(Configuration::get('HIPAY_CONFIG'));    	
+        $result = json_decode(Configuration::get('HIPAY_CONFIG',null, $id_shop_group, $id_shop));
+        return (object)$result;
     }
     public function setConfigHiPay($key, $value)
     {
+        // init multistore
+        $id_shop        = (int)$this->context->shop->id;
+        $id_shop_group  = (int)Shop::getContextShopGroupID();
     	// the config is stacked in JSON
     	$this->configHipay->$key =$value;
-    	return Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay)); 
+    	if(Configuration::updateValue('HIPAY_CONFIG', json_encode($this->configHipay),false,$id_shop_group,$id_shop)){
+    	    return true;
+        }else{
+            throw new Exception($this->l('Update failed, try again.'));
+        }
     }
     public function setAllConfigHiPay($objHipay = null)
     {
@@ -846,7 +889,21 @@ class Hipay extends PaymentModule
         $objHipay->proxyUrl                    = '';
         $objHipay->proxyLogin                  = '';
         $objHipay->proxyPassword               = '';
+        $objHipay->selected                    = '';
 
         return $this->setAllConfigHiPay($objHipay);
+    }
+    public function object_to_array($data)
+    {
+        if (is_array($data) || is_object($data))
+        {
+            $result = array();
+            foreach ($data as $key => $value)
+            {
+                $result[$key] = $this->object_to_array($value);
+            }
+            return $result;
+        }
+        return $data;
     }
 }
