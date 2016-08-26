@@ -106,9 +106,9 @@ class HipayUserAccount extends HipayREST
     }
 
     // get user informations saved in HiPay Direct / Wallet with WSlogin and WSpassword
-    public function getAccountInfos($params = [], $needLogin = true)
+    public function getAccountInfos($params = [], $needLogin = true, $needSandboxLogin = false)
     {
-        $result = $this->sendApiRequest($this->client_url.'/get-infos', $needLogin, $params);
+        $result = $this->sendApiRequest($this->client_url.'/get-infos', $needLogin, $params, $needSandboxLogin);
         return ($result->code === 0) ? $result : false;
     }
 

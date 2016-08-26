@@ -420,6 +420,8 @@ class Hipay extends PaymentModule
             return $this->saveSettingsConfiguration();
         } elseif (Tools::isSubmit('submitCancel')) {
             return true;
+        } elseif (Tools::isSubmit('submitSandboxConnection')) {
+            return $this->loginSandbox($user_account);
         }
 }
 
@@ -576,6 +578,45 @@ class Hipay extends PaymentModule
         return ! empty($refund_available);
     }
 
+    protected function loginSandbox($user_account)
+    {
+        // get values sandbox login and password
+        $ws_login = Tools::getValue('modal_ws_login');
+        $ws_password = Tools::getValue('modal_ws_password');
+
+        if ($ws_login && $ws_password) {
+            try {
+                // ctrl if login and password are crypted to md5
+                $is_valid_login = (bool)Validate::isMd5($ws_login);
+                $is_valid_password = (bool)Validate::isMd5($ws_password);
+
+                if ($is_valid_login && $is_valid_password) {
+                    $params = [
+                        'ws_login' => $ws_login,
+                        'ws_password' => $ws_password,
+                    ];
+                    $user_account = new HipayUserAccount($this);
+                    $account = $user_account->getAccountInfos($params, false, true);
+
+                    if (isset($account->code) && ($account->code == 0)) {
+                        return $this->registerExistingAccount($account, $params, true);
+                    } else {
+                        $this->_errors[] = $this->l('Authentication failed!');
+                    }
+                } else {
+                    $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
+                    $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
+                }
+            }catch (Exception $e) {
+                // TODO LOGS
+                $this->_errors[] = $this->l($e->getMessage());
+            }
+        } else {
+            $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
+            $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
+        }
+        return false;
+    }
     protected function login($user_account)
     {
         // get values login and password
@@ -604,15 +645,17 @@ class Hipay extends PaymentModule
                         $this->clearAccountData();
                         return false;
                     }
+                } else {
+                    $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
+                    $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
                 }
             } catch (Exception $e) {
                 // TODO LOGS
                 $this->_errors[] = $this->l($e->getMessage());
             }
+        } else {
             $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
             $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
-
-            return false;
         }
         /*
         if ($user_account->isEmailAvailable($email)) {
@@ -623,7 +666,7 @@ class Hipay extends PaymentModule
             $this->_warnings[] = $this->l('You already have an account, please fill the fields below');
         }
         */
-        return true;
+        return false;
     }
 
     protected function orderAlreadyRefunded($order)
@@ -666,6 +709,7 @@ class Hipay extends PaymentModule
             }
         }
 
+        // init details for save configuration hipay in database
         $details = [
             'user_mail'                 => $user_mail,
             $prefix.'_user_account_id'  => $user_account_id,
@@ -674,8 +718,12 @@ class Hipay extends PaymentModule
             $prefix.'_ws_password'      => $params['ws_password'],
         ];
 
+        // save configuration hipay in database
         if(!$this->saveConfigurationDetails($details)){
-            $this->clearAccountData();
+            // not clear if connection sandbox account
+            if(!$sandbox){
+                $this->clearAccountData();
+            }
             return false;
         }
 
@@ -753,7 +801,8 @@ class Hipay extends PaymentModule
          */
         try{
             $sandbox_mode           = Tools::getValue('settings_switchmode');
-            $selected_rating        = Tools::getValue('settings_production_rating');
+            $selected_prod_rating   = Tools::getValue('settings_production_rating');
+            $selected_sandbox_rating= Tools::getValue('settings_sandbox_rating');
             $selected_config        = '';
 
             // get currencies
@@ -786,7 +835,8 @@ class Hipay extends PaymentModule
 
             // init array with all selected informations
             $selected_config = [
-                'rating'        => $selected_rating,
+                'rating_prod'   => $selected_prod_rating,
+                'rating_sandbox'=> $selected_sandbox_rating,
                 'currencies'    => [
                     'production' => $selectedCurrenciesProd,
                     'sandbox'    => $selectedCurrenciesSandbox,
@@ -893,6 +943,9 @@ class Hipay extends PaymentModule
 
         return $this->setAllConfigHiPay($objHipay);
     }
+    /*
+     * function convert object config in array for smarty
+     */
     public function object_to_array($data)
     {
         if (is_array($data) || is_object($data))

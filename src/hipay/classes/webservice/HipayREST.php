@@ -43,20 +43,22 @@ abstract class HipayREST
     }
 
     // function Request by cURL
-    public function sendApiRequest($function, $needLogin = true, $params = [])
+    public function sendApiRequest($function, $needLogin = true, $params = [], $needSandboxLogin = false)
     {
         try {
             $url = $this->getRestClientURL();
-
+            if ( $needSandboxLogin ) {
+                $url = $this->rest_test_url;
+            }
             if((bool)$needLogin) {
                 if ((bool)$this->configHipay->sandbox_mode) {
-                    $this->RestLogin    = $this->configHipay->sandbox_ws_login;
+                    $this->RestLogin = $this->configHipay->sandbox_ws_login;
                     $this->RestPassword = $this->configHipay->sandbox_ws_password;
                 } else {
-                    $this->RestLogin    = $this->configHipay->production_ws_login;
+                    $this->RestLogin = $this->configHipay->production_ws_login;
                     $this->RestPassword = $this->configHipay->production_ws_password;
                 }
-            }else{
+            } else {
                 if($params['ws_login'] && !empty($params['ws_login'])){
                     $this->RestLogin    = $params['ws_login'];
                     $this->RestPassword = $params['ws_password'];

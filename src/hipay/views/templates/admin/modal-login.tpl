@@ -19,8 +19,8 @@
                 </button>
                 <h4 class="modal-title" id="sandbox-login">{l s='Connect test account' mod='hipay'}</h4>
             </div>
-            <div class="modal-body">
-                <form>
+            <form method="post" action="{$smarty.server.REQUEST_URI|escape:'htmlall'}" id="modal_login_form">
+                <div class="modal-body">
                     <div class="row">
                         <div class="col-md-12 col-xs-12">
                             <div class="row">
@@ -48,13 +48,13 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='hipay'}</button>
-                <button type="button" class="btn btn-primary">{l s='HiPay Direct test website' mod='hipay'}</button>
-            </div>
+                    </div>                   
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='hipay'}</button>
+                    <button type="submit" class="btn btn-primary" name="submitSandboxConnection">{l s='HiPay Direct test website' mod='hipay'}</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
