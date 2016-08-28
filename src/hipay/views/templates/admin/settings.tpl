@@ -127,6 +127,7 @@
                     <div class="col-md-6">
                         <h4>{l s='Test configuration' mod='hipay'}</h4>
                         {if !empty($config_hipay.sandbox_ws_login)}
+                        <div class="row">
                             <label class="control-label col-lg-3">
                                     <span class="label-tooltip"
                                           data-toggle="tooltip"
@@ -145,6 +146,7 @@
                                     {/foreach}
                                 </select>
                             </div>
+                        </div>
                         {else}
                             {l s='Your test account is not connected yet. Enter your test account\'s web service login and password in order to use a test' mod='hipay'}
                         {/if}
@@ -167,7 +169,7 @@
                             </div>
                         {else}
                             <!-- TABLE SELECTION TEST START -->
-                            <table class="table">
+                            <table class="table"  id="accounts-currencies2">
                                 <thead>
                                 <tr>
                                     <th>{l s='Currency' mod='hipay'}</th>
@@ -176,7 +178,7 @@
                                 </tr>
                                 </thead>
                                 <tbody>
-                                {foreach from=$config_hipay.sandbox_user_account_id key=currency item=options}
+                                {foreach from=$selectedCurrencies key=currency item=options}
                                     <tr>
                                         {if $currency == "0" }
                                             <td colspan="3">{l s='no data' mod='hipay'}</td>

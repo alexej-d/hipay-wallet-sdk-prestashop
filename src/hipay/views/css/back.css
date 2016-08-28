@@ -162,6 +162,10 @@ table.form-control-static thead th:last-child {
     padding-top: 10px;
     padding-bottom: 10px;
 }
+#accounts-currencies2 td {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
 
 .trait {
     border-right-style: solid;
