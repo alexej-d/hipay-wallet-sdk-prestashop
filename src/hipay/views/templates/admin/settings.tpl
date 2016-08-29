@@ -26,7 +26,7 @@
                     </label>
                     <div class="col-lg-9">
                         <span class="switch prestashop-switch fixed-width-lg">
-                            <input type="radio" name="settings_switchmode" id="settings_switchmode_on" value="1" {if $config_hipay.sandbox_mode == true}checked="checked"{/if}>
+                            <input type="radio" name="settings_switchmode" id="settings_switchmode_on" value="1" {if $config_hipay.sandbox_mode }checked="checked"{/if}>
                             <label for="settings_switchmode_on">{l s='Yes'}</label>
                             <input type="radio" name="settings_switchmode" id="settings_switchmode_off" value="0" {if $config_hipay.sandbox_mode == false}checked="checked"{/if}>
                             <label for="settings_switchmode_off">{l s='No'}</label>
@@ -83,7 +83,7 @@
                                         <td colspan="3">{l s='no data' mod='hipay'}</td>
                                     {else}
                                         <td>{$currency}</td>
-                                        {if !isset($config_hipay.production_user_account_id.$currency) || $config_hipay.production_user_account_id.$currency|@count == 0}
+                                        {if !isset($config_hipay.production.$currency) || $config_hipay.production.$currency|@count == 0}
                                             <td colspan="2">
                                             <span class="icon icon-warning-sign" aria-hidden="true">
                                                 <a href="#">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
@@ -93,9 +93,9 @@
                                             <td>
                                                 <select id="settings_production_{$currency}_user_account_id" name="settings_production_{$currency}_user_account_id">
                                                     <option value="">{l s='--- Account ID ---' mod='hipay'}</option>
-                                                    {foreach from=$config_hipay.production_user_account_id.$currency item=select}
-                                                        <option value="{$select}" {if $config_hipay.selected.currencies.production.$currency.accountID == {$select}}selected{/if}>{$select}</option>
-                                                        {foreachelse}
+                                                    {foreach from=$config_hipay.production.$currency key=aid item=select}
+                                                        <option value="{$aid}" {if $config_hipay.selected.currencies.production.$currency.accountID == {$aid}}selected{/if}>{$aid}</option>
+                                                    {foreachelse}
                                                         <option value="">{l s="No Account ID" mod='hipay'}</option>
                                                     {/foreach}
                                                 </select>
@@ -103,11 +103,14 @@
                                             <td>
                                                 <select id="settings_production_{$currency}_website_id" name="settings_production_{$currency}_website_id">
                                                     <option value="">{l s='--- Website ID ---' mod='hipay'}</option>
-                                                    {foreach from=$config_hipay.production_website_id.$currency item=select}
-                                                        <option value="{$select}" {if $config_hipay.selected.currencies.production.$currency.websiteID == {$select}}selected{/if}>{$select}</option>
-                                                        {foreachelse}
-                                                        <option value="">{l s="No Website ID" mod='hipay'}</option>
-                                                    {/foreach}
+                                                    {assign var="prod_account_id" value=$config_hipay.selected.currencies.production.$currency.accountID}
+                                                    {if isset($prod_account_id)}
+                                                        {foreach from=$config_hipay.production.$currency.$prod_account_id item=select}
+                                                            <option value="{$select.website_id}" {if $config_hipay.selected.currencies.production.$currency.websiteID == {$select.website_id}}selected{/if}>{$select.website_id}</option>
+                                                            {foreachelse}
+                                                            <option value="">{l s="No Website ID" mod='hipay'}</option>
+                                                        {/foreach}
+                                                    {/if}
                                                 </select>
                                             </td>
                                         {/if}
@@ -184,7 +187,7 @@
                                             <td colspan="3">{l s='no data' mod='hipay'}</td>
                                         {else}
                                             <td>{$currency}</td>
-                                            {if $config_hipay.sandbox_user_account_id.$currency|@count == 0}
+                                            {if !isset($config_hipay.sandbox.$currency) || $config_hipay.sandbox.$currency|@count == 0}
                                                 <td colspan="2">
                                                 <span class="icon icon-warning-sign" aria-hidden="true">
                                                     <a href="#">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
@@ -194,8 +197,8 @@
                                                 <td>
                                                     <select id="settings_sandbox_{$currency}_user_account_id" name="settings_sandbox_{$currency}_user_account_id">
                                                         <option value="">{l s='--- Account ID ---' mod='hipay'}</option>
-                                                        {foreach from=$config_hipay.sandbox_user_account_id.$currency item=select}
-                                                            <option value="{$select}" {if $config_hipay.selected.currencies.sandbox.$currency.accountID == {$select}}selected{/if}>{$select}</option>
+                                                        {foreach from=$config_hipay.sandbox.$currency key=aid item=select}
+                                                            <option value="{$aid}" {if $config_hipay.selected.currencies.sandbox.$currency.accountID == {$aid}}selected{/if}>{$aid}</option>
                                                             {foreachelse}
                                                             <option value="">{l s="No Account ID" mod='hipay'}</option>
                                                         {/foreach}
@@ -204,11 +207,14 @@
                                                 <td>
                                                     <select id="settings_sandbox_{$currency}_website_id" name="settings_sandbox_{$currency}_website_id">
                                                         <option value="">{l s='--- Website ID ---' mod='hipay'}</option>
-                                                        {foreach from=$config_hipay.sandbox_website_id.$currency item=select}
-                                                            <option value="{$select}" {if $config_hipay.selected.currencies.sandbox.$currency.websiteID == {$select}}selected{/if}>{$select}</option>
-                                                            {foreachelse}
-                                                            <option value="">{l s="No Website ID" mod='hipay'}</option>
-                                                        {/foreach}
+                                                        {assign var="test_account_id" value=$config_hipay.selected.currencies.sandbox.$currency.accountID}
+                                                        {if isset($test_account_id)}
+                                                            {foreach from=$config_hipay.sandbox.$currency.$test_account_id item=select}
+                                                                <option value="{$select.website_id}" {if $config_hipay.selected.currencies.sandbox.$currency.websiteID == {$select.website_id}}selected{/if}>{$select.website_id}</option>
+                                                                {foreachelse}
+                                                                <option value="">{l s="No Website ID" mod='hipay'}</option>
+                                                            {/foreach}
+                                                        {/if}
                                                     </select>
                                                 </td>
                                             {/if}
@@ -240,3 +246,48 @@
 
 {* include file modal-login.tpl *}
 {include file='./modal-login.tpl'}
+
+<script type="text/javascript">
+    jQuery( document ).ready(function() {
+
+        {*
+         * init for dynamic selectbox the json website_id by user_account_id
+         *}
+
+        var json_prod = {if isset($config_hipay.production) && is_array($config_hipay.production)}{$config_hipay.production|@json_encode}{else}""{/if};
+        var json_test = {if isset($config_hipay.sandbox) && is_array($config_hipay.sandbox)}{$config_hipay.sandbox|@json_encode}{else}""{/if} ;
+
+        {*
+         * generate function .change jquery for each currency and selectbox user_account_id
+         *}
+        {foreach from=$selectedCurrencies key=currency item=options}
+        $("#settings_production_{$currency}_user_account_id").change(function () {
+
+            var idSelect = "settings_production_{$currency}_website_id";
+            var idAccount = $(this).val();
+
+            $('#' + idSelect).children('option:not(:first)').remove();
+            addOptionsWebsiteId(idSelect, json_prod.{$currency},idAccount);
+        });
+        $("#settings_sandbox_{$currency}_user_account_id").change(function () {
+            var idSelect = "settings_sandbox_{$currency}_website_id";
+            var idAccount = $(this).val();
+
+            $('#' + idSelect).children('option:not(:first)').remove();
+            addOptionsWebsiteId(idSelect, json_test.{$currency}, idAccount);
+        });
+        {/foreach}
+
+        {*
+         * function load website_id by user_account_id and currency in the selectbox website_id
+         *}
+         function addOptionsWebsiteId(idSelect, config, idAccount) {
+            $.each(config[idAccount], function (key, value) {
+                $('#' + idSelect)
+                        .append($("<option></option>")
+                                .attr("value", value.website_id)
+                                .text(value.website_id));
+            });
+         }
+    });
+</script>

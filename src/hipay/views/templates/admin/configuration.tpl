@@ -43,10 +43,10 @@
                 <span class="icon icon-money"></span> {l s='Logs' mod='hipay'}</a>
             </li>
 		{/if}
-        <li class="pull-right"><a href="https://{if $sandbox == true}test-{/if}www.hipaywallet.com/" role="tab" target="_blank" id="login_hipay_link">
+        <li class="pull-right"><a href="https://{if isset($sandbox) && $sandbox == true}test-{/if}www.hipaywallet.com/" role="tab" target="_blank" id="login_hipay_link">
             <span class="icon icon-arrow-right"></span> {l s='Go to HiPay Wallet' mod='hipay'}</a>
         </li>
-        <li class="pull-right"><a href="https://{if $sandbox == true}test-{/if}www.hipaydirect.com/" role="tab" target="_blank" id="login_hipay_link">
+        <li class="pull-right"><a href="https://{if isset($sandbox) && $sandbox == true}test-{/if}www.hipaydirect.com/" role="tab" target="_blank" id="login_hipay_link">
             <span class="icon icon-arrow-right"></span> {l s='Go to HiPay Direct' mod='hipay'}</a>
         </li>
 	</ul>

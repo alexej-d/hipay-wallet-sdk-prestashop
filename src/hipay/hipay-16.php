@@ -244,7 +244,7 @@ class Hipay extends PaymentModule
         $this->postProcess($user_account);
 
         // Generate configuration forms
-        if (!empty($this->configHipay->user_mail)) {
+        if (!empty($this->configHipay->production_ws_login)) {
             $amount_limit = 1000;
 
             // get currencies
@@ -419,11 +419,15 @@ class Hipay extends PaymentModule
         } elseif (Tools::isSubmit('submitSettings')) {
             return $this->saveSettingsConfiguration();
         } elseif (Tools::isSubmit('submitCancel')) {
+            $this->majConfigurationByApi($user_account);
             return true;
         } elseif (Tools::isSubmit('submitSandboxConnection')) {
             return $this->loginSandbox($user_account);
+        } else {
+            // update by api hipay
+            return $this->majConfigurationByApi($user_account);
         }
-}
+    }
 
     public function getLocalizedRatesPDFLink()
     {
@@ -669,6 +673,51 @@ class Hipay extends PaymentModule
         return false;
     }
 
+    protected function majConfigurationByApi($user_account, $sandbox = false){
+        if(isset($this->configHipay->production_ws_login) && isset($this->configHipay->production_ws_password)) {
+            // get values sandbox login and password
+            $ws_login = (!$sandbox ? $this->configHipay->production_ws_login : $this->configHipay->sandbox_ws_login);
+            $ws_password = (!$sandbox ? $this->configHipay->production_ws_password : $this->configHipay->sandbox_ws_password);
+            $params = [];
+            // true by default but to get user account info sandbox init to false
+            $needLogin = true;
+
+            if (!empty($ws_login)) {
+                try {
+                    $params = [
+                        'ws_login' => $ws_login,
+                        'ws_password' => $ws_password,
+                    ];
+                    $needLogin = false;
+
+                    $user_account = new HipayUserAccount($this);
+                    $account = $user_account->getAccountInfos($params, $needLogin, $sandbox);
+
+                    if (isset($account->code) && ($account->code == 0)) {
+                        if ($this->registerExistingAccount($account, $params, $sandbox)) {
+                            // after get user info production go to get user info sandbox
+                            if (!$sandbox) {
+                                $this->majConfigurationByApi($user_account, true);
+                            } else {
+                                return true;
+                            }
+                        } else {
+                            // TODO LOGS
+                        }
+                    }
+                } catch (Exception $e) {
+                    // TODO LOGS
+                    $this->_errors[] = $this->l($e->getMessage());
+                }
+            } else {
+                // TODO LOGS
+            }
+            return false;
+        }else{
+            return true;
+        }
+    }
+
     protected function orderAlreadyRefunded($order)
     {
         $history_states = $order->getHistory($this->context->language->id);
@@ -692,31 +741,37 @@ class Hipay extends PaymentModule
     {
         $prefix             = $sandbox ? 'sandbox' : 'production';
         $user_mail          = '';
-        $website_id         = '';
-        $user_account_id    = '';
+        $data               = [];
 
         // init array config values by currency
         foreach($account->websites as $websiteDefault){
-            $user_mail[$account->currency][$websiteDefault->website_id]         = $websiteDefault->website_email;
-            $website_id[$account->currency][$websiteDefault->website_id]        = $websiteDefault->website_id;
-            $user_account_id[$account->currency][$websiteDefault->website_id]   = $account->user_account_id;
+            $user_mail[$account->currency][$websiteDefault->website_id] = $websiteDefault->website_email;
+            $data[$account->currency][$account->user_account_id][] = [
+                'user_account_id' => $account->user_account_id,
+                'website_id' => $websiteDefault->website_id,
+                'user_mail' => $websiteDefault->website_email,
+            ];
         }
         foreach($account->sub_accounts as $sub_account){
             foreach($sub_account->websites as $website){
-                $user_mail[$sub_account->currency][$website->website_id]        = $website->website_email;
-                $website_id[$sub_account->currency][$website->website_id]       = $website->website_id;
-                $user_account_id[$sub_account->currency][$website->website_id]  = $sub_account->user_account_id;
+                $user_mail[$sub_account->currency][$website->website_id] = $website->website_email;
+                $data[$sub_account->currency][$sub_account->user_account_id][] = [
+                    'user_account_id' => $sub_account->user_account_id,
+                    'website_id' => $website->website_id,
+                    'user_mail' => $website->website_email,
+                ];
             }
         }
 
         // init details for save configuration hipay in database
         $details = [
+            $prefix                     => $data,
             'user_mail'                 => $user_mail,
-            $prefix.'_user_account_id'  => $user_account_id,
-            $prefix.'_website_id'       => $website_id,
             $prefix.'_ws_login'         => $params['ws_login'],
             $prefix.'_ws_password'      => $params['ws_password'],
         ];
+
+        if($sandbox) unset($details['user_mail']);
 
         // save configuration hipay in database
         if(!$this->saveConfigurationDetails($details)){
@@ -774,6 +829,7 @@ class Hipay extends PaymentModule
         }
         return $selectedCurrencies;
     }
+
     protected function shouldDisplayCompleteLoginForm($user_account)
     {
         // If merchant tries to login / subscribe
@@ -886,10 +942,12 @@ class Hipay extends PaymentModule
         $id_shop        = (int)$this->context->shop->id;
         $id_shop_group  = (int)Shop::getContextShopGroupID();
         $confHipay = Configuration::get('HIPAY_CONFIG',null, $id_shop_group, $id_shop);
+
         // if config exist but empty, init new object for configHipay
         if(!$confHipay || empty($confHipay)){
             $this->insertConfigHiPay();
         }
+
         // not empty in bdd and the config is stacked in JSON
         $result = json_decode(Configuration::get('HIPAY_CONFIG',null, $id_shop_group, $id_shop));
         return (object)$result;
@@ -926,12 +984,8 @@ class Hipay extends PaymentModule
         $objHipay = new StdClass();
         $objHipay->user_mail                   = '';
         $objHipay->sandbox_mode                = false;
-        $objHipay->sandbox_user_account_id     = '';
-        $objHipay->sandbox_website_id          = '';
         $objHipay->sandbox_ws_login            = '';
         $objHipay->sandbox_ws_password         = '';
-        $objHipay->production_user_account_id  = '';
-        $objHipay->production_website_id       = '';
         $objHipay->production_ws_login         = '';
         $objHipay->production_ws_password      = '';
         $objHipay->welcome_message_shown       = false;
@@ -939,6 +993,8 @@ class Hipay extends PaymentModule
         $objHipay->proxyUrl                    = '';
         $objHipay->proxyLogin                  = '';
         $objHipay->proxyPassword               = '';
+        $objHipay->sandbox                     = '';
+        $objHipay->production                  = '';
         $objHipay->selected                    = '';
 
         return $this->setAllConfigHiPay($objHipay);

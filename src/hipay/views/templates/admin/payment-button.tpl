@@ -9,4 +9,6 @@
 * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 *}
+<div class="panel">
 {$button_form}
+</div>
