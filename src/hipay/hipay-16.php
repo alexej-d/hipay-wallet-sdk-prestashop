@@ -35,6 +35,10 @@ class Hipay extends PaymentModule
     public $hipay_rating = [];
 
     const PAYMENT_FEED_BASE_LINK = 'https://www.prestashop.com/download/pdf/pspayments/Fees_PSpayments_';
+    const URL_TEST_HIPAY_DIRECT = 'https://test-www.hipaydirect.com/';
+    const URL_PROD_HIPAY_DIRECT = 'https://www.hipaydirect.com/';
+    const URL_TEST_HIPAY_WALLET = 'https://test-www.hipaywallet.com/';
+    const URL_PROD_HIPAY_WALLET = 'https://www.hipaywallet.com/';
 
     public static $available_rates_links = [
         'EN', 'FR', 'ES', 'DE',
@@ -127,34 +131,50 @@ class Hipay extends PaymentModule
 
     public function installAdminTab()
     {
-        $class_name = 'AdminHiPayRefund';
+        $class_names = [
+            'AdminHiPayRefund',
+            'AdminHiPayPaymentbutton',
+        ];
+        return $this->createTabAdmin($class_names);
+    }
 
-        $tab = new Tab();
+    protected function createTabAdmin($class_names)
+    {
+        foreach ($class_names as $class_name)
+        {
+            $tab = new Tab();
 
-        $tab->active = 1;
-        $tab->module = $this->name;
-        $tab->class_name = $class_name;
-        $tab->id_parent = -1;
+            $tab->active = 1;
+            $tab->module = $this->name;
+            $tab->class_name = $class_name;
+            $tab->id_parent = -1;
 
-        foreach (Language::getLanguages(true) as $lang) {
-            $tab->name[$lang['id_lang']] = $this->name;
+            foreach (Language::getLanguages(true) as $lang) {
+                $tab->name[$lang['id_lang']] = $this->name;
+            }
+            if(!$tab->add())
+                return false;
         }
-
-        return $tab->add();
+        return true;
     }
 
     public function uninstallAdminTab()
     {
-        $class_name = 'AdminHiPayRefund';
+        $class_names = [
+            'AdminHiPayRefund',
+            'AdminHiPayPaymentbutton',
+        ];
+        foreach ($class_names as $class_name) {
+            $id_tab = (int)Tab::getIdFromClassName($class_name);
 
-        $id_tab = (int)Tab::getIdFromClassName($class_name);
-
-        if ($id_tab) {
-            $tab = new Tab($id_tab);
-            return $tab->delete();
+            if ($id_tab) {
+                $tab = new Tab($id_tab);
+                if(!$tab->delete()){
+                    return false;
+                }
+            }
         }
-
-        return false;
+        return true;
     }
 
     public function installHipay()
@@ -250,31 +270,40 @@ class Hipay extends PaymentModule
             // get currencies
             $selectedCurrencies = $this->getCurrencies();
 
+            // get button images
+            $images = $this->getImageButtons();
+            $url_img= $this->_path.'views/img/payment_buttons/';
+
             $this->context->smarty->assign(array(
                 'is_logged'             => true,
                 'amount_limit'          => Tools::displayPrice($amount_limit, $this->context->currency),
-                'button_form'           => 'button form',//$form->getCustomersServiceForm($user_account),
                 'logs'                  => 'logs',//$form->getTransactionsForm($user_account),
                 'rating'                => $this->hipay_rating,
-                'config_hipay'          => $this->object_to_array($config_hipay),
                 'selectedCurrencies'    => $selectedCurrencies,
+                'button_images'         => $images,
+                'url_images'            => $url_img,
+                'add_image_ajax_url'    => $this->context->link->getAdminLink('AdminHiPayPaymentbutton'),
             ));
 
         } else {
             $complete_form = $this->shouldDisplayCompleteLoginForm($user_account);
 
+            // get captcha by api
+            $user_account = new HipayUserAccount($this);
+            $captcha = $user_account->getCaptcha();
+
             $this->context->smarty->assign(array(
-                'is_logged' => false,
-                'login_form' => $form->getLoginForm($complete_form),
-                'register_form' => $form->getRegisterForm(),
+                'is_logged'     => false,
+                'login_form'    => $form->getLoginForm($complete_form),
+                'register_form' => $form->getRegisterForm($captcha),
             ));
         }
 
         // Set alert messages
         $this->context->smarty->assign(array(
-            'form_errors' => $this->_errors,
-            'form_successes' => $this->_successes,
-            'form_infos' => $this->_warnings,
+            'form_errors'       => $this->_errors,
+            'form_successes'    => $this->_successes,
+            'form_infos'        => $this->_warnings,
         ));
 
         // Define templates paths
@@ -282,9 +311,14 @@ class Hipay extends PaymentModule
         $configuration = $this->local_path.'views/templates/admin/configuration.tpl';
 
         $this->context->smarty->assign(array(
-            'alerts' => $this->context->smarty->fetch($alerts),
-            'module_dir' => $this->_path,
-            'localized_rates_pdf_link' => $this->getLocalizedRatesPDFLink()
+            'alerts'                    => $this->context->smarty->fetch($alerts),
+            'module_dir'                => $this->_path,
+            'localized_rates_pdf_link'  => $this->getLocalizedRatesPDFLink(),
+            'config_hipay'              => $this->object_to_array($config_hipay),
+            'url_test_hipay_direct'     => Hipay::URL_TEST_HIPAY_DIRECT,
+            'url_prod_hipay_direct'     => Hipay::URL_PROD_HIPAY_DIRECT,
+            'url_test_hipay_wallet'     => Hipay::URL_TEST_HIPAY_WALLET,
+            'url_prod_hipay_wallet'     => Hipay::URL_PROD_HIPAY_WALLET,
         ));
 
         return $this->context->smarty->fetch($configuration);
@@ -413,17 +447,29 @@ class Hipay extends PaymentModule
     protected function postProcess($user_account)
     {
         if (Tools::isSubmit('submitReset')) {
+            $this->context->smarty->assign('active_tab', 'login_form');
             return $this->clearAccountData();
         } elseif (Tools::isSubmit('submitLogin')) {
+            $this->context->smarty->assign('active_tab', 'login_form');
             return $this->login($user_account);
         } elseif (Tools::isSubmit('submitSettings')) {
+            $this->context->smarty->assign('active_tab', 'settings_form');
             return $this->saveSettingsConfiguration();
         } elseif (Tools::isSubmit('submitCancel')) {
+            $this->context->smarty->assign('active_tab', 'settings_form');
             $this->majConfigurationByApi($user_account);
             return true;
         } elseif (Tools::isSubmit('submitSandboxConnection')) {
+            $this->context->smarty->assign('active_tab', 'settings_form');
             return $this->loginSandbox($user_account);
+        } elseif (Tools::isSubmit('submitPaymentbutton')) {
+            $this->context->smarty->assign('active_tab', 'button_form');
+            return $this->savePaymentButtonConfiguration();
+        } elseif (Tools::isSubmit('reloadCaptcha')) {
+            $this->context->smarty->assign('active_tab', 'register_form');
+            return true;
         } else {
+
             // update by api hipay
             return $this->majConfigurationByApi($user_account);
         }
@@ -903,7 +949,7 @@ class Hipay extends PaymentModule
             $this->setConfigHiPay('sandbox_mode', ($sandbox_mode ? true:false));
             $this->setConfigHiPay('selected', $selected_config);
 
-            $this->_successes[] = $this->l('configuration saved successfully.');
+            $this->_successes[] = $this->l('Settings configuration saved successfully.');
 
             return true;
 
@@ -913,7 +959,32 @@ class Hipay extends PaymentModule
         }
         return false;
     }
+    protected function savePaymentButtonConfiguration()
+    {
+        /*
+         * GET VALUES FORM
+         */
+        try{
+            $button_text_fr = Tools::getValue('button_text_fr');
+            $button_text_en = Tools::getValue('button_text_en');
 
+            $this->configHipay->payment_form_type   = (bool)Tools::getValue('payment_form_type');
+            $this->configHipay->manual_capture      = (bool)Tools::getValue('manual_capture');
+            $this->configHipay->button_text_fr      = (!empty($button_text_fr) ? $button_text_fr : 'Payer par carte bancaire');
+            $this->configHipay->button_text_en      = (!empty($button_text_en) ? $button_text_en : 'Pay by credit or debit card');
+            $this->configHipay->button_images       = Tools::getValue('button_images');
+
+            if($this->setAllConfigHiPay()){
+                $this->_successes[] = $this->l('Payment button configuration saved successfully.');
+                return true;
+            }
+
+        }catch (Exception $e){
+            // TODO LOGS
+            $this->_errors[] = $this->l($e->getMessage());
+        }
+        return false;
+    }
     /*
      * Function to get the module configuration
  	 * @user_mail array
@@ -982,6 +1053,8 @@ class Hipay extends PaymentModule
     {
         // init objet config for HiPay
         $objHipay = new StdClass();
+
+        // settings configuration
         $objHipay->user_mail                   = '';
         $objHipay->sandbox_mode                = false;
         $objHipay->sandbox_ws_login            = '';
@@ -996,6 +1069,13 @@ class Hipay extends PaymentModule
         $objHipay->sandbox                     = '';
         $objHipay->production                  = '';
         $objHipay->selected                    = '';
+
+        // payment button configuration
+        $objHipay->payment_form_type           = 1;
+        $objHipay->manual_capture              = 1;
+        $objHipay->button_text_fr              = 'Payer par carte bancaire';
+        $objHipay->button_text_en              = 'Pay by credit or debit card';
+        $objHipay->button_images               = '';
 
         return $this->setAllConfigHiPay($objHipay);
     }
@@ -1014,5 +1094,20 @@ class Hipay extends PaymentModule
             return $result;
         }
         return $data;
+    }
+
+    public function getImageButtons()
+    {
+        $dir = dirname(__FILE__).'/views/img/payment_buttons';
+        if(file_exists($dir))
+        {
+            $dh  = opendir($dir);
+            while (false !== ($filename = readdir($dh))) {
+                $files[] = $filename;
+            }
+            $images=preg_grep('/\.(jpg|jpeg|png|gif)(?:[\?\#].*)?$/i', $files);
+            return $images;
+        }
+
     }
 }

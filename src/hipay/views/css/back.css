@@ -176,3 +176,30 @@ table.form-control-static thead th:last-child {
     margin-top: 30px !important;
     margin-bottom: 30px !important;
 }
+.space-button2 {
+    margin-top: 15px !important;
+    margin-bottom: 15px !important;
+}
+.img-error {
+    color: red;
+    font-weight: bold;
+    display: none;
+}
+.img-success {
+    color: green;
+    font-weight: bold;
+    display: none;
+}
+.captcha {
+    margin-left: 10px;
+}
+.captcha-form span.input-group-addon {
+    display: block;
+    clear:both;
+    width: 100%;
+    border: none !important;
+    background-color: inherit !important;
+    padding: 0 !important;
+    padding-top: 10px !important;
+    margin: 0 !important;
+}

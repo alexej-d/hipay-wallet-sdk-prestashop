@@ -19,7 +19,7 @@ abstract class HipayREST
     protected $context = false;
     protected $module = false;
 
-    protected $rest_url = 'https://merchant.hipaywallet.com/api';
+    protected $rest_url = 'https://qa-merchant.hipaywallet.com/api';
     protected $rest_test_url = 'https://test-merchant.hipaywallet.com/api';
 
     public $configHipay;
@@ -43,7 +43,7 @@ abstract class HipayREST
     }
 
     // function Request by cURL
-    public function sendApiRequest($function, $needLogin = true, $params = [], $needSandboxLogin = false)
+    public function sendApiRequest($function, $needLogin = true, $params = [], $needSandboxLogin = false, $captcha = false)
     {
         try {
             $url = $this->getRestClientURL();
@@ -59,9 +59,14 @@ abstract class HipayREST
                     $this->RestPassword = $this->configHipay->production_ws_password;
                 }
             } else {
-                if($params['ws_login'] && !empty($params['ws_login'])){
+                if(isset($params['ws_login']) && !empty($params['ws_login'])){
                     $this->RestLogin    = $params['ws_login'];
                     $this->RestPassword = $params['ws_password'];
+                    $params = [];
+                }
+                if($captcha){
+                    $this->RestLogin    = false;
+                    $this->RestPassword = '';
                     $params = [];
                 }
             }
@@ -84,10 +89,14 @@ abstract class HipayREST
             curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, 60000);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
-            curl_setopt($ch, CURLOPT_POST, true );
-            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
+            if(!$captcha){
+                curl_setopt($ch, CURLOPT_POST, true );
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
+            }else{
+                curl_setopt($ch, CURLOPT_POST, false );
+                curl_setopt($ch, CURLOPT_HTTPGET, true);
+            }
             curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
-
             //3 proxy settings
             //conf proxy
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

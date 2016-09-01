@@ -59,7 +59,7 @@
                                 <select id="settings_production_rating" name="settings_production_rating">
                                     <option value="">{l s='--- Select the content rating ---' mod='hipay'}</option>
                                     {foreach from=$rating item=select}
-                                        <option value="{$select.key}" {if $config_hipay.selected.rating_prod == $select.key}selected{/if}>{$select.name|escape:html:'UTF-8'}</option>
+                                        <option value="{$select.key}" {if isset($config_hipay.selected.rating_prod) && $config_hipay.selected.rating_prod == $select.key}selected{/if}>{$select.name|escape:html:'UTF-8'}</option>
                                         {foreachelse}
                                         <option value="">{l s="No Content rating" mod='hipay'}</option>
                                     {/foreach}
@@ -94,7 +94,7 @@
                                                 <select id="settings_production_{$currency}_user_account_id" name="settings_production_{$currency}_user_account_id">
                                                     <option value="">{l s='--- Account ID ---' mod='hipay'}</option>
                                                     {foreach from=$config_hipay.production.$currency key=aid item=select}
-                                                        <option value="{$aid}" {if $config_hipay.selected.currencies.production.$currency.accountID == {$aid}}selected{/if}>{$aid}</option>
+                                                        <option value="{$aid}" {if isset($config_hipay.selected.currencies) && $config_hipay.selected.currencies.production.$currency.accountID == $aid}selected{/if}>{$aid}</option>
                                                     {foreachelse}
                                                         <option value="">{l s="No Account ID" mod='hipay'}</option>
                                                     {/foreach}
@@ -103,10 +103,12 @@
                                             <td>
                                                 <select id="settings_production_{$currency}_website_id" name="settings_production_{$currency}_website_id">
                                                     <option value="">{l s='--- Website ID ---' mod='hipay'}</option>
-                                                    {assign var="prod_account_id" value=$config_hipay.selected.currencies.production.$currency.accountID}
+                                                    {if isset($config_hipay.selected.currencies)}
+                                                        {assign var="prod_account_id" value=$config_hipay.selected.currencies.production.$currency.accountID}
+                                                    {/if}
                                                     {if isset($prod_account_id)}
                                                         {foreach from=$config_hipay.production.$currency.$prod_account_id item=select}
-                                                            <option value="{$select.website_id}" {if $config_hipay.selected.currencies.production.$currency.websiteID == {$select.website_id}}selected{/if}>{$select.website_id}</option>
+                                                            <option value="{$select.website_id}" {if isset($config_hipay.selected.currencies) && $config_hipay.selected.currencies.production.$currency.websiteID == $select.website_id}selected{/if}>{$select.website_id}</option>
                                                             {foreachelse}
                                                             <option value="">{l s="No Website ID" mod='hipay'}</option>
                                                         {/foreach}
@@ -143,7 +145,7 @@
                                 <select id="settings_sandbox_rating" name="settings_sandbox_rating">
                                     <option value="">{l s='--- Select the content rating ---' mod='hipay'}</option>
                                     {foreach from=$rating item=select}
-                                        <option value="{$select.key}" {if $config_hipay.selected.rating_sandbox == $select.key}selected{/if}>{$select.name|escape:html:'UTF-8'}</option>
+                                        <option value="{$select.key}" {if  isset($config_hipay.selected.rating_sandbox) && $config_hipay.selected.rating_sandbox == $select.key}selected{/if}>{$select.name|escape:html:'UTF-8'}</option>
                                         {foreachelse}
                                         <option value="">{l s="No Content rating" mod='hipay'}</option>
                                     {/foreach}
@@ -165,7 +167,7 @@
                             <div class="row">
                                 <p>
                                     {l s='If you don\'t have a test account yet, you can create one on the' mod='hipay'}&nbsp;
-                                    <a href="https://test-www.hipaydirect.com/" target="_blank">
+                                    <a href="{$url_test_hipay_direct}" target="_blank">
                                         {l s='HiPay Direct test website' mod='hipay'}
                                     </a>
                                 </p>
@@ -198,7 +200,7 @@
                                                     <select id="settings_sandbox_{$currency}_user_account_id" name="settings_sandbox_{$currency}_user_account_id">
                                                         <option value="">{l s='--- Account ID ---' mod='hipay'}</option>
                                                         {foreach from=$config_hipay.sandbox.$currency key=aid item=select}
-                                                            <option value="{$aid}" {if $config_hipay.selected.currencies.sandbox.$currency.accountID == {$aid}}selected{/if}>{$aid}</option>
+                                                            <option value="{$aid}" {if isset($config_hipay.selected.currencies) && $config_hipay.selected.currencies.sandbox.$currency.accountID == $aid}selected{/if}>{$aid}</option>
                                                             {foreachelse}
                                                             <option value="">{l s="No Account ID" mod='hipay'}</option>
                                                         {/foreach}
@@ -207,10 +209,12 @@
                                                 <td>
                                                     <select id="settings_sandbox_{$currency}_website_id" name="settings_sandbox_{$currency}_website_id">
                                                         <option value="">{l s='--- Website ID ---' mod='hipay'}</option>
-                                                        {assign var="test_account_id" value=$config_hipay.selected.currencies.sandbox.$currency.accountID}
+                                                        {if isset($config_hipay.selected.currencies)}
+                                                            {assign var="test_account_id" value=$config_hipay.selected.currencies.sandbox.$currency.accountID}
+                                                        {/if}
                                                         {if isset($test_account_id)}
                                                             {foreach from=$config_hipay.sandbox.$currency.$test_account_id item=select}
-                                                                <option value="{$select.website_id}" {if $config_hipay.selected.currencies.sandbox.$currency.websiteID == {$select.website_id}}selected{/if}>{$select.website_id}</option>
+                                                                <option value="{$select.website_id}" {if isset($config_hipay.selected) && $config_hipay.selected.currencies.sandbox.$currency.websiteID == $select.website_id}selected{/if}>{$select.website_id}</option>
                                                                 {foreachelse}
                                                                 <option value="">{l s="No Website ID" mod='hipay'}</option>
                                                             {/foreach}

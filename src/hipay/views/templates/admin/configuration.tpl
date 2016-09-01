@@ -23,53 +23,60 @@
 <div role="tabpanel">
 	<ul class="nav nav-tabs" role="tablist">
 		{if ($is_logged == false)}
-			<li role="presentation" class="active"><a href="#login_form" aria-controls="login_form" role="tab" data-toggle="tab">
+			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'login_form'))} active{/if}"><a href="#login_form" aria-controls="login_form" role="tab" data-toggle="tab">
 				<span class="icon icon-user"></span> {l s='Login' mod='hipay'}</a>
 			</li>
-			<li role="presentation" class=""><a href="#register_form" aria-controls="register_form" role="tab" data-toggle="tab">
+			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'register_form'))} active{/if}"><a href="#register_form" aria-controls="register_form" role="tab" data-toggle="tab">
                 <span class="icon icon-plus-sign"></span> {l s='Create a new HiPay Direct account' mod='hipay'}</a>
 			</li>
 		{else}
-			<li role="presentation"{if ((isset($active_tab) == false) || ($active_tab == 'settings'))} class="active"{/if}><a href="#settings_form" aria-controls="settings_form" role="tab" data-toggle="tab">
+			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'settings_form'))} active{/if}"><a href="#settings_form" aria-controls="settings_form" role="tab" data-toggle="tab">
 				<span class="icon icon-cogs"></span> {l s='Settings' mod='hipay'}</a>
 			</li>
-			<li role="presentation"{if ((isset($active_tab) == true) && ($active_tab == 'button'))} class="active"{/if}><a href="#button_form" aria-controls="button_form" role="tab" data-toggle="tab">
+			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'button_form'))} active{/if}"><a href="#button_form" aria-controls="button_form" role="tab" data-toggle="tab">
 				<span class="icon icon-money"></span> {l s='Payment' mod='hipay'}</a>
 			</li>
-            <li role="presentation"{if ((isset($active_tab) == true) && ($active_tab == 'faq'))} class="active"{/if}><a href="#faq" aria-controls="faq" role="tab" data-toggle="tab">
+            <li role="presentation"><a href="#faq" aria-controls="faq" role="tab" data-toggle="tab">
                 <span class="icon icon-money"></span> {l s='FAQ' mod='hipay'}</a>
             </li>
-            <li role="presentation"{if ((isset($active_tab) == true) && ($active_tab == 'logs'))} class="active"{/if}><a href="#logs" aria-controls="logs" role="tab" data-toggle="tab">
+            <li role="presentation"><a href="#logs" aria-controls="logs" role="tab" data-toggle="tab">
                 <span class="icon icon-money"></span> {l s='Logs' mod='hipay'}</a>
             </li>
 		{/if}
-        <li class="pull-right"><a href="https://{if isset($sandbox) && $sandbox == true}test-{/if}www.hipaywallet.com/" role="tab" target="_blank" id="login_hipay_link">
+        {if isset($config_hipay)}
+            {assign var="sandbox" value=$config_hipay}
+        {else}
+            {assign var="sandbox" value=false}
+        {/if}
+
+
+        <li class="pull-right"><a href="{if $sandbox && isset($sandbox.sandbox_mode) && $sandbox.sandbox_mode == true}{$url_test_hipay_wallet}{else}{$url_prod_hipay_wallet}{/if}" role="tab" target="_blank" id="login_hipay_link">
             <span class="icon icon-arrow-right"></span> {l s='Go to HiPay Wallet' mod='hipay'}</a>
         </li>
-        <li class="pull-right"><a href="https://{if isset($sandbox) && $sandbox == true}test-{/if}www.hipaydirect.com/" role="tab" target="_blank" id="login_hipay_link">
+        <li class="pull-right"><a href="{if $sandbox && isset($sandbox.sandbox_mode) && $sandbox.sandbox_mode == true}{$url_test_hipay_direct}{else}{$url_prod_hipay_direct}{/if}" role="tab" target="_blank" id="login_hipay_link">
             <span class="icon icon-arrow-right"></span> {l s='Go to HiPay Direct' mod='hipay'}</a>
         </li>
 	</ul>
 
 	<div class="tab-content">
 		{if ($is_logged == false)}
-			<div role="tabpanel" class="tab-pane{if ((isset($active_tab) == false) || ($active_tab == 'login'))} active{/if}" id="login_form">
+			<div role="tabpanel" class="tab-pane {if ((isset($active_tab) == false) || ($active_tab == 'login_form'))} active{/if}" id="login_form">
                 {include file='./login.tpl'}
             </div>
-			<div role="tabpanel" class="tab-pane{if ((isset($active_tab) == true) || ($active_tab == 'register'))} active{/if}" id="register_form">
+			<div role="tabpanel" class="tab-pane {if ((isset($active_tab) == false) || ($active_tab == 'register_form'))} active{/if}" id="register_form">
                 {include file='./register.tpl'}
             </div>
 		{else}
-			<div role="tabpanel" class="tab-pane{if ((isset($active_tab) == false) || ($active_tab == 'settings'))} active{/if}" id="settings_form">
+			<div role="tabpanel" class="tab-pane  {if ((isset($active_tab) == false) || ($active_tab == 'settings_form'))} active{/if}" id="settings_form">
                 {include file='./settings.tpl'}
             </div>
-			<div role="tabpanel" class="tab-pane{if ((isset($active_tab) == true) && ($active_tab == 'button'))} active{/if}" id="button_form">
+			<div role="tabpanel" class="tab-pane  {if ((isset($active_tab) == false) || ($active_tab == 'button_form'))} active{/if}" id="button_form">
                 {include file='./payment-button.tpl'}
             </div>
-            <div role="tabpanel" class="tab-pane{if ((isset($active_tab) == true) && ($active_tab == 'faq'))} active{/if}" id="faq">
+            <div role="tabpanel" class="tab-pane" id="faq">
                 {include file='./faq.tpl'}
             </div>
-            <div role="tabpanel" class="tab-pane{if ((isset($active_tab) == true) && ($active_tab == 'logs'))} active{/if}" id="logs">
+            <div role="tabpanel" class="tab-pane" id="logs">
                 {include file='./logs.tpl'}
             </div>
 		{/if}

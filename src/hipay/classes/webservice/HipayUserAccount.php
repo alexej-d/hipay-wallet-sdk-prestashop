@@ -184,4 +184,10 @@ class HipayUserAccount extends HipayREST
         return false;
     }
 
+    public function getCaptcha()
+    {
+        $params = [];
+        $result = $this->sendApiRequest($this->client_url.'/captcha', false, $params, false, true);
+        return ($result->captcha_id > 0) ? $result : false;
+    }
 }
