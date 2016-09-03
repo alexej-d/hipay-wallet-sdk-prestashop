@@ -19,11 +19,8 @@ require_once(dirname(__FILE__).'/HipayREST.php');
 class HipayUserAccount extends HipayREST
 {
     protected $accounts_currencies = array();
-
     protected $client_url = 'user-account';
-
     protected $module = false;
-
     protected static $email_available = null;
 
     public function __construct($module_instance)
@@ -38,87 +35,71 @@ class HipayUserAccount extends HipayREST
         );
     }
 
-    public function createAccount($email, $first_name, $last_name, $sandbox_mode = false)
+    /**
+     * Get ID and image for the security code by CAPTCHA
+     */
+    public function getCaptcha()
     {
+        $params = [];
+        $result = $this->sendApiRequest($this->client_url.'/captcha','get', false, $params, false, true);
+        return ($result->code == 0) ? $result : false;
+    }
+
+    /**
+     * Create an account in production
+     */
+    public function createAccount($params)
+    {
+        // get currency default
         $currency = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
         $currency_code = Tools::strtoupper($currency->iso_code);
-
+        // get country code default
         $country = new Country(Configuration::get('PS_COUNTRY_DEFAULT'));
         $country_code = Tools::strtolower($country->iso_code);
-
+        // get code iso
         $language = new Language(Configuration::get('PS_LANG_DEFAULT'));
         $language_code = Tools::strtoupper($language->iso_code);
 
         $data = array(
-            'email' => $email,
-            'first_name' => $first_name,
-            'last_name' => $last_name,
-            'currency_code' => $currency_code,
-            'iso_country' => $country_code,
-            'iso_lang' => $language_code,
-            'remote_addr' => Tools::getRemoteAddr(),
-            'sandbox_mode' => (int)$sandbox_mode,
-            'shop_email' => Configuration::get('PS_SHOP_EMAIL'),
-            'shop_name' => Configuration::get('PS_SHOP_NAME'),
-            'shop_domain' => Tools::getShopDomainSsl(true, true),
+            'email'             => $params['email'],
+            'controle_type'     => 'CAPTCHA',
+            'captcha'           =>
+                [
+                    'id'        => $params['captcha_id'],
+                    'phrase'    => $params['captcha_code'],
+                ],
+            'first_name'        => $params['first_name'],
+            'last_name'         => $params['last_name'],
+            'currency_code'     => $currency_code,
+            'local'             => $country_code . '_' . $language_code,
+            'activation_type'   => true,
         );
 
-        $result = $this->prestaShopWebservice('/account/create', $data);
+        $result = $this->sendApiRequest($this->client_url.'/create','post', false, $data, false, false);
+        return ($result->code === 0) ? $result : false;
 
-        if (isset($result->code) && ($result->code === 0)) {
-            $this->configHipay->user_mail = $email;
-
-            if ($sandbox_mode == false) {
-                $this->configHipay->production_user_account_id = $result->userAccountId;
-                $this->configHipay->production_website_id      = $result->websiteId;
-                $this->configHipay->production_ws_login        = $result->wsLogin;
-                $this->configHipay->production_ws_password     = $result->wsPassword;
-            } else {
-                $this->configHipay->sandbox_user_account_id    = $result->userAccountId;
-                $this->configHipay->sandbox_website_id         = $result->websiteId;
-                $this->configHipay->sandbox_ws_login           = $result->wsLogin;
-                $this->configHipay->sandbox_ws_password        = $result->wsPassword;
-            }
-
-            return true;
-        }
-
-        return false;
-    }
-    // check if email is available in HiPay Direct
-    public function isEmailAvailable($email)
-    {
-        $needLogin = false;
-        if ( ! is_bool(static::$email_available)) {
-            $result = $this->sendApiRequest('/is-available', $needLogin, array(
-                'user_email' => $email,
-                'entity' => 'direct',
-            ));
-            $data = json_decode($result);
-            if (isset($data['is_available'])) {
-                static::$email_available = ! ($data['is_available'] === false);
-            } else {
-                return false;
-            }
-        }
-
-        return static::$email_available;
     }
 
-    // get user informations saved in HiPay Direct / Wallet with WSlogin and WSpassword
+    /**
+     * get user informations saved in HiPay Direct / Wallet with WSlogin and WSpassword
+     */
     public function getAccountInfos($params = [], $needLogin = true, $needSandboxLogin = false)
     {
-        $result = $this->sendApiRequest($this->client_url.'/get-infos', $needLogin, $params, $needSandboxLogin);
+        $result = $this->sendApiRequest($this->client_url.'/get-infos','post', $needLogin, $params, $needSandboxLogin);
         return ($result->code === 0) ? $result : false;
     }
 
-    // check if bank info status is validated or not
+    /**
+     *
+     * WAITING FUNCTIONS FOR DEV
+     *
+     * check if bank info status is validated or not
+     */
     public function getBankInfoStatus(){
         $needLogin = true;
         $result = $this->sendApiRequest($this->client_url.'/get-infos', $needLogin);
         return ($data['code'] === 0) ? $data : false;
     }
-
     public function getTransactions()
     {
         $psp_hipay_date_from = (isset($this->context->cookie->psp_hipay_date_from) ? $this->context->cookie->psp_hipay_date_from : date('Y-m-dT')).'00:00:00';
@@ -141,7 +122,6 @@ class HipayUserAccount extends HipayREST
             }
         }
     }
-
     public function getWebsiteAccountIdByIsoCode($iso_code)
     {
         $account = $this->getAccountInfos();
@@ -158,7 +138,6 @@ class HipayUserAccount extends HipayREST
 
         return false;
     }
-
     public function getWebsiteIdByIsoCode($iso_code)
     {
         $account = $this->getAccountInfos();
@@ -184,10 +163,5 @@ class HipayUserAccount extends HipayREST
         return false;
     }
 
-    public function getCaptcha()
-    {
-        $params = [];
-        $result = $this->sendApiRequest($this->client_url.'/captcha', false, $params, false, true);
-        return ($result->captcha_id > 0) ? $result : false;
-    }
+
 }

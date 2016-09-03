@@ -22,6 +22,8 @@ class HipayForm extends HipayFormInputs {
     public $name = false;
     public $configHipay;
 
+    public $url_cgv  = 'https://www.hipaydirect.com/terms/CGU_hipay_fr.pdf';
+
     public function __construct($module_instance)
     {
         // Requirements
@@ -90,7 +92,6 @@ class HipayForm extends HipayFormInputs {
 
         return $this->helper->generateForm(array($form));
     }
-
     public function getLoginFormValues()
     {
         $values['install_ws_login']     = Tools::getValue('install_ws_login');
@@ -102,7 +103,7 @@ class HipayForm extends HipayFormInputs {
      */
     public function getRegisterForm($captcha)
     {
-        $this->helper->tpl_vars['fields_value'] = $this->getRegisterFormValues();
+        $this->helper->tpl_vars['fields_value'] = $this->getRegisterFormValues($captcha);
 
         // email
         $form['form']['input'][] = $this->generateInputEmail(
@@ -139,6 +140,24 @@ class HipayForm extends HipayFormInputs {
             'required'  => true,
             'suffix'    => $captcha->captcha_img . '<button type="submit" class="btn captcha" name="reloadCaptcha" id="reload-captcha">' . $this->module->l('New captcha', 'HipayForm') . '</button>',
         ));
+        // init terms & conditions
+        $label_cgv = '<a href="'.$this->url_cgv.'" target="_blank">'.$this->module->l('I agree with the terms and conditions', 'HipayForm').'</a>';
+        $form['form']['input'][] = array(
+            'type'    => 'checkbox',
+            'name'    => 'register_cgv',
+            'values' => array(
+                'query' => array(
+                    array(
+                        'id' => 'on',
+                        'name' => $label_cgv,
+                        'val' => '1'
+                    ),
+                ),
+                'id' => 'id',
+                'name' => 'name'
+            )
+        );
+
         // BUTTON Reset & Save
         $form['form']['buttons'][] = $this->generateSubmitButton($this->module->l('Reset', 'HipayForm'), array(
             'class' => 'pull-left',
@@ -152,17 +171,14 @@ class HipayForm extends HipayFormInputs {
 
         return $this->helper->generateForm(array($form));    
     }
-    /**
-     * Register form values
-     */
-    public function getRegisterFormValues()
+    public function getRegisterFormValues($captcha)
     {
         $email = Configuration::get('PS_SHOP_EMAIL');
         $values = array(
             'register_user_email'   => Tools::getValue('register_user_email', $email),
             'register_firstname'    => Tools::getValue('register_firstname'),
             'register_lastname'     => Tools::getValue('register_lastname'),
-            'register_captcha_id'   => '',
+            'register_captcha_id'   => $captcha->captcha_id,
             'register_captcha_img'  => '',
         );
         return $values;
@@ -189,11 +205,6 @@ class HipayForm extends HipayFormInputs {
 
         return $this->helper->generateForm([$form]);
     }
-
-
-    /**
-     * Total refund form values
-     */
     public function getRefundFormValues($order)
     {
         return [];

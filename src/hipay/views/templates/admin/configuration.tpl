@@ -26,14 +26,14 @@
 			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'login_form'))} active{/if}"><a href="#login_form" aria-controls="login_form" role="tab" data-toggle="tab">
 				<span class="icon icon-user"></span> {l s='Login' mod='hipay'}</a>
 			</li>
-			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'register_form'))} active{/if}"><a href="#register_form" aria-controls="register_form" role="tab" data-toggle="tab">
+			<li role="presentation" class=" {if ((isset($active_tab) == true) && ($active_tab == 'register_form'))} active{/if}"><a href="#register_form" aria-controls="register_form" role="tab" data-toggle="tab">
                 <span class="icon icon-plus-sign"></span> {l s='Create a new HiPay Direct account' mod='hipay'}</a>
 			</li>
 		{else}
 			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'settings_form'))} active{/if}"><a href="#settings_form" aria-controls="settings_form" role="tab" data-toggle="tab">
 				<span class="icon icon-cogs"></span> {l s='Settings' mod='hipay'}</a>
 			</li>
-			<li role="presentation" class=" {if ((isset($active_tab) == false) || ($active_tab == 'button_form'))} active{/if}"><a href="#button_form" aria-controls="button_form" role="tab" data-toggle="tab">
+			<li role="presentation" class=" {if ((isset($active_tab) == true) && ($active_tab == 'button_form'))} active{/if}"><a href="#button_form" aria-controls="button_form" role="tab" data-toggle="tab">
 				<span class="icon icon-money"></span> {l s='Payment' mod='hipay'}</a>
 			</li>
             <li role="presentation"><a href="#faq" aria-controls="faq" role="tab" data-toggle="tab">
@@ -63,14 +63,14 @@
 			<div role="tabpanel" class="tab-pane {if ((isset($active_tab) == false) || ($active_tab == 'login_form'))} active{/if}" id="login_form">
                 {include file='./login.tpl'}
             </div>
-			<div role="tabpanel" class="tab-pane {if ((isset($active_tab) == false) || ($active_tab == 'register_form'))} active{/if}" id="register_form">
+			<div role="tabpanel" class="tab-pane {if ((isset($active_tab) == true) && ($active_tab == 'register_form'))} active{/if}" id="register_form">
                 {include file='./register.tpl'}
             </div>
 		{else}
 			<div role="tabpanel" class="tab-pane  {if ((isset($active_tab) == false) || ($active_tab == 'settings_form'))} active{/if}" id="settings_form">
                 {include file='./settings.tpl'}
             </div>
-			<div role="tabpanel" class="tab-pane  {if ((isset($active_tab) == false) || ($active_tab == 'button_form'))} active{/if}" id="button_form">
+			<div role="tabpanel" class="tab-pane  {if ((isset($active_tab) == true) && ($active_tab == 'button_form'))} active{/if}" id="button_form">
                 {include file='./payment-button.tpl'}
             </div>
             <div role="tabpanel" class="tab-pane" id="faq">

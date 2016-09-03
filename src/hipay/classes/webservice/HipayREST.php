@@ -43,7 +43,7 @@ abstract class HipayREST
     }
 
     // function Request by cURL
-    public function sendApiRequest($function, $needLogin = true, $params = [], $needSandboxLogin = false, $captcha = false)
+    public function sendApiRequest($function, $type = 'post', $needLogin = true, $params = [], $needSandboxLogin = false, $no_login = false)
     {
         try {
             $url = $this->getRestClientURL();
@@ -64,7 +64,7 @@ abstract class HipayREST
                     $this->RestPassword = $params['ws_password'];
                     $params = [];
                 }
-                if($captcha){
+                if($no_login){
                     $this->RestLogin    = false;
                     $this->RestPassword = '';
                     $params = [];
@@ -89,7 +89,7 @@ abstract class HipayREST
             curl_setopt($ch, CURLOPT_FRESH_CONNECT, true);
             curl_setopt($ch, CURLOPT_TIMEOUT_MS, 60000);
             curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 30);
-            if(!$captcha){
+            if($type == 'post'){
                 curl_setopt($ch, CURLOPT_POST, true );
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($params));
             }else{
