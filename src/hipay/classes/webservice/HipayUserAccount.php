@@ -18,10 +18,12 @@ require_once(dirname(__FILE__).'/HipayREST.php');
 
 class HipayUserAccount extends HipayREST
 {
-    protected $accounts_currencies = array();
-    protected $client_url = 'user-account';
-    protected $module = false;
-    protected static $email_available = null;
+    protected $accounts_currencies      = array();
+    protected $client_url               = 'user-account';
+    protected $module                   = false;
+    protected static $email_available   = null;
+    protected $business_lines           = 18;
+    protected $website_topic            = 175;
 
     public function __construct($module_instance)
     {
@@ -46,19 +48,31 @@ class HipayUserAccount extends HipayREST
     }
 
     /**
+     * Check code to activate account merchant
+     */
+    public function checkCodeValidation($code)
+    {
+        $params = [
+            'validation_code' => $code,
+        ];
+        $result = $this->sendApiRequest($this->client_url.'/check/code','post', true, $params, false, false);
+        return ($result->code == 0) ? $result : false;
+    }
+
+    /**
      * Create an account in production
      */
     public function createAccount($params)
     {
         // get currency default
-        $currency = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
-        $currency_code = Tools::strtoupper($currency->iso_code);
+        $currency       = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
+        $currency_code  = Tools::strtoupper($currency->iso_code);
         // get country code default
-        $country = new Country(Configuration::get('PS_COUNTRY_DEFAULT'));
-        $country_code = Tools::strtolower($country->iso_code);
+        $country        = new Country(Configuration::get('PS_COUNTRY_DEFAULT'));
+        $country_code   = Tools::strtolower($country->iso_code);
         // get code iso
-        $language = new Language(Configuration::get('PS_LANG_DEFAULT'));
-        $language_code = Tools::strtoupper($language->iso_code);
+        $language       = new Language(Configuration::get('PS_LANG_DEFAULT'));
+        $language_code  = Tools::strtoupper($language->iso_code);
 
         $data = array(
             'email'             => $params['email'],
@@ -68,16 +82,55 @@ class HipayUserAccount extends HipayREST
                     'id'        => $params['captcha_id'],
                     'phrase'    => $params['captcha_code'],
                 ],
-            'first_name'        => $params['first_name'],
-            'last_name'         => $params['last_name'],
-            'currency_code'     => $currency_code,
-            'local'             => $country_code . '_' . $language_code,
+            'firstname'        => $params['first_name'],
+            'lastname'         => $params['last_name'],
+            'currency'          => $currency_code,
+            'locale'            => $country_code . '_' . $language_code,
             'activation_type'   => true,
         );
 
-        $result = $this->sendApiRequest($this->client_url.'/create','post', false, $data, false, false);
-        return ($result->code === 0) ? $result : false;
+        $this->module->logs->logsHipay(print_r($data, true));
 
+        $result = $this->sendApiRequest($this->client_url.'/create','post', false, $data, false, false);
+
+        $this->module->logs->logsHipay(print_r($result, true));
+
+        return ($result->code === 0) ? $result : false;
+    }
+
+    /**
+     * Create an account in production
+     */
+    public function createWebsite($currency)
+    {
+        // init params web service
+        $email = Configuration::get('PS_SHOP_EMAIL');
+        foreach($this->configHipay->production->$currency as $key=>$account_id){
+            $email = $account_id->$key[0]['user_email'];
+            break;
+        }
+        $params = [
+            'name'          => Configuration::get('PS_SHOP_NAME'),
+            'url'           => Tools::getShopDomainSsl(true),
+            'contact_email' => $email,
+            'business_line' => $this->business_lines,
+            'topic'         => $this->website_topic,
+        ];
+
+        $result = $this->sendApiRequest($this->client_url.'/add/website','post', true, $params, false, false);
+        return ($result->code === 0) ? $result : false;
+    }
+
+    /**
+     * Check code to activate account merchant
+     */
+    public function duplicateByCurrency($currency)
+    {
+        $params = [
+            'currency' => $currency,
+        ];
+        $result = $this->sendApiRequest($this->client_url.'/duplicate','post', true, $params, false, false);
+        return ($result->code == 0) ? $result : false;
     }
 
     /**
