@@ -130,7 +130,7 @@ class HipayForm extends HipayFormInputs {
         // init hidden field contain captcha_id
         $form['form']['input'][] = array(
             'type'  => 'hidden',
-            'value' => $captcha->captcha_id,
+            'value' => (!empty($captcha) ? $captcha->captcha_id : ''),
             'name'  => 'register_captcha_id',
         );
         // init the field contains the captcha answer
@@ -138,7 +138,7 @@ class HipayForm extends HipayFormInputs {
             'class'     => 'fixed-width-xxl captcha-form',
             'hint'      => $this->module->l('You must fill this captcha to validate the form', 'HipayForm'),
             'required'  => true,
-            'suffix'    => $captcha->captcha_img . '<button type="submit" class="btn captcha" name="reloadCaptcha" id="reload-captcha">' . $this->module->l('New captcha', 'HipayForm') . '</button>',
+            'suffix'    => (!empty($captcha) ? $captcha->captcha_img : '') . '<button type="submit" class="btn captcha" name="reloadCaptcha" id="reload-captcha">' . $this->module->l('New captcha', 'HipayForm') . '</button>',
         ));
         // init terms & conditions
         $label_cgv = '<a href="'.$this->url_cgv.'" target="_blank">'.$this->module->l('I agree with the terms and conditions', 'HipayForm').'</a>';
@@ -178,7 +178,7 @@ class HipayForm extends HipayFormInputs {
             'register_user_email'   => Tools::getValue('register_user_email', $email),
             'register_firstname'    => Tools::getValue('register_firstname'),
             'register_lastname'     => Tools::getValue('register_lastname'),
-            'register_captcha_id'   => $captcha->captcha_id,
+            'register_captcha_id'   => (!empty($captcha) ? $captcha->captcha_id : ''),
             'register_captcha_img'  => '',
         );
         return $values;

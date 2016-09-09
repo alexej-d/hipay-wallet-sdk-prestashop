@@ -38,6 +38,7 @@ class HipayLogs
         {
             $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-error-logs.txt','a+');
             fseek($fp,SEEK_END);
+            fputs($fp,'## ' . date('Y-m-d H:i:s') . ' ##' . PHP_EOL);
             fputs($fp,$msg . PHP_EOL);
             fclose($fp);
         }
@@ -55,6 +56,7 @@ class HipayLogs
         {
             $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');
             fseek($fp,SEEK_END);
+            fputs($fp,'## ' . date('Y-m-d H:i:s') . ' ##' . PHP_EOL);
             fputs($fp,$msg . PHP_EOL );
             fclose($fp);
         }

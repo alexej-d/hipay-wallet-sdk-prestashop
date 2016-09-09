@@ -335,8 +335,7 @@ class Hipay extends PaymentModule
         $this->postProcess($user_account);
 
         // Generate configuration forms
-        if (!empty($this->configHipay->production_ws_login) && !$this->create_account) {
-            $amount_limit = 1000;
+        if (!empty($this->configHipay->production_ws_login) && !$this->create_account && $this->configHipay->production_status) {
 
             // get currencies
             $selectedCurrencies = $this->getCurrencies();
@@ -347,7 +346,6 @@ class Hipay extends PaymentModule
 
             $this->context->smarty->assign(array(
                 'is_logged'             => true,
-                'amount_limit'          => Tools::displayPrice($amount_limit, $this->context->currency),
                 'logs'                  => 'logs',//$form->getTransactionsForm($user_account),
                 'rating'                => $this->hipay_rating,
                 'selectedCurrencies'    => $selectedCurrencies,
@@ -355,14 +353,23 @@ class Hipay extends PaymentModule
                 'url_images'            => $url_img,
                 'add_image_ajax_url'    => $this->context->link->getAdminLink('AdminHiPayPaymentbutton'),
             ));
+            // init warning
+            $this->getWarningHiPayStatus();
 
         } else {
             // get captcha by api
-            if(!$this->create_account)
+            // only if first step create account, not validation account
+            if($this->create_account)
             {
-                // only if first step create account, not validation account
-                $user_account = new HipayUserAccount($this);
-                $captcha = $user_account->getCaptcha();
+                try {
+                    $user_account = new HipayUserAccount($this);
+                    $captcha = $user_account->getCaptcha();
+                }catch(Exception $e){
+                    $this->logs->errorLogsHipay($e->getMessage());
+                    $this->_errors[] = $this->l('error - method captcha not allowed.');
+                }
+            } else {
+                $captcha = false;
             }
             $this->context->smarty->assign(array(
                 'is_logged'     => false,
@@ -398,87 +405,143 @@ class Hipay extends PaymentModule
     }
     protected function postProcess($user_account)
     {
+        $ur_redirection = AdminController::$currentIndex.'&configure='.$this->name.'&token='.Tools::getAdminTokenLite('AdminModules');
         $this->logs->logsHipay('---- >> function postProcess');
+
         if (Tools::isSubmit('submitReset')) {
+
             $this->logs->logsHipay('---- >> submitReset');
+
             // reset in login
             $this->context->smarty->assign('active_tab', 'login_form');
-            return $this->clearAccountData();
+            $this->create_account = true;
+            $this->clearAccountData();
+            Tools::redirectAdmin($ur_redirection);
 
         } elseif (Tools::isSubmit('submitLogin')) {
+
             $this->logs->logsHipay('---- >> submitLogin');
+
             // execute login
             $this->context->smarty->assign('active_tab', 'login_form');
-            return $this->login($user_account);
+            if($this->login($user_account)){
+                Tools::redirectAdmin($ur_redirection);
+            }else{
+                return false;
+            }
 
         } elseif (Tools::isSubmit('submitSettings')) {
+
             $this->logs->logsHipay('---- >> submitSettings');
+
             // save the settings form
             $this->context->smarty->assign('active_tab', 'settings_form');
-            return $this->saveSettingsConfiguration();
+            if($this->saveSettingsConfiguration()){
+                return $this->majConfigurationByApi($user_account);
+            } else {
+                return false;
+            }
 
         } elseif (Tools::isSubmit('submitCancel')) {
+
             $this->logs->logsHipay('---- >> submitCancel');
+
             // discard in settings form
             $this->context->smarty->assign('active_tab', 'settings_form');
             $this->majConfigurationByApi($user_account);
-            return true;
+            Tools::redirectAdmin($ur_redirection);
 
         } elseif (Tools::isSubmit('submitSandboxConnection')) {
+
             $this->logs->logsHipay('---- >> submitSandboxConnection');
+
             // execute login sandbox
             $this->context->smarty->assign('active_tab', 'settings_form');
-            return $this->loginSandbox($user_account);
+            if($this->loginSandbox($user_account)){
+                Tools::redirectAdmin($ur_redirection);
+            }else{
+                return false;
+            }
 
         } elseif (Tools::isSubmit('submitPaymentbutton')) {
+
             $this->logs->logsHipay('---- >> submitPaymentbutton');
+
             // save the payment buttons form
             $this->context->smarty->assign('active_tab', 'button_form');
-            return $this->savePaymentButtonConfiguration();
+            if($this->savePaymentButtonConfiguration()){
+                return $this->majConfigurationByApi($user_account);
+            } else {
+                return false;
+            }
 
         } elseif (Tools::isSubmit('reloadCaptcha')) {
+
             $this->logs->logsHipay('---- >> reloadCaptcha');
+
             // reload a new captcha because it's hard to read it
             $this->context->smarty->assign('active_tab', 'register_form');
             return true;
 
         } elseif (Tools::isSubmit('submitRegister')) {
+
             $this->logs->logsHipay('---- >> submitRegister');
+
             // create an account in production
             $this->context->smarty->assign('active_tab', 'register_form');
+
             if($this->createMerchantAccount()){
+
                 // captcha and create account are ok
                 // display second screen to validate code validator
                 $this->logs->logsHipay('---- >> Display Validator form and validate account');
                 $this->context->smarty->assign('validator', true);
                 $this->context->smarty->assign('email', Tools::getValue('register_user_email'));
-                $this->create_account = true;
+                $this->create_account = false;
+
             } else {
+
                 // error captcha or create an account
                 $this->logs->logsHipay('---- >> Display captcha form because error');
                 $this->context->smarty->assign('validator', false);
-                $this->create_account = false;
+                $this->create_account = true;
                 return false;
             }
             return true;
 
         } elseif (Tools::isSubmit('submitValidator')) {
+
             $this->logs->logsHipay('---- >> submitValidator');
+
             if( $this->checkCodeValidation() ) {
-                return true;
+
+                Tools::redirectAdmin($ur_redirection);
+
             } else {
+
                 $this->logs->logsHipay('---- >> Display Validator form because error');
+
                 $this->context->smarty->assign('active_tab', 'register_form');
-                $this->context->smarty->assign('validator', true);
+                if($this->create_account && !$this->configHipay->production_status)
+                {
+                    $this->context->smarty->assign('validator', false);
+                    $this->create_account = true;
+                } else {
+                    $this->context->smarty->assign('validator', true);
+                    $this->create_account = false;
+                }
                 return false;
             }
         } else {
+
             $this->logs->logsHipay('---- >> default action');
+
             // default action
             if(!empty($this->configHipay->production_ws_login)){
                 $this->context->smarty->assign('active_tab', 'settings_form');
             }else{
                 $this->context->smarty->assign('active_tab', 'login_form');
+                $this->create_account = true;
             }
             // update by api hipay
             return $this->majConfigurationByApi($user_account);
@@ -486,6 +549,38 @@ class Hipay extends PaymentModule
         }
     }
 
+    /**
+     * Load warning information if account merchant
+     * is not activated, identified or bank infos status
+     */
+    protected function getWarningHiPayStatus()
+    {
+        // get config info
+        $activated              = $this->configHipay->production_status;
+        $bank_info_validated    = $this->configHipay->bank_info_validated;
+        $identified             = $this->configHipay->identified;
+        $ws_login               = $this->configHipay->production_ws_login;
+        // account activated
+        // @ return 0 or 1 (0 = not activated) (1 = activated
+        if( !$activated && $ws_login)
+        {
+            $this->_warnings[] = $this->l('Your account is not activated, if you encounter a problem contact the support HiPay at support.direct@hipay.com');
+        }
+        
+        // bank status
+        // @ return 0 or 1 (0 = empty / waiting validation) (1 = validated)
+        if( !$bank_info_validated && $ws_login)
+        {
+            $this->_warnings[] = $this->l('Please provide your bank information on your HiPay merchant back office.');
+        }
+        
+        // identified
+        // @ return 0 or 1 (0 = empty / waiting identification) (1 = identified)
+        if( !$identified && $ws_login)
+        {
+            $this->_warnings[] = $this->l('In order to identify yourself, we invite you to upload the following documents and to send them to us for validation on your HiPay merchant back office.');
+        }
+    }
     /**
      * Save configuration about account merchant
      * Login production and sandbox
@@ -521,10 +616,10 @@ class Hipay extends PaymentModule
                     $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
                     $this->_warnings[] = $this->l('If you have lost these details, please log in to your HiPay account to retrieve it');
                 }
-            }catch (Exception $e) {
+            } catch (Exception $e) {
                 // LOGS
                 $this->logs->errorLogsHipay($e->getMessage());
-                $this->_errors[] = $this->l($e->getMessage());
+                $this->_errors[] = $this->l('error on the webservice, try again later or contact the support HiPay');
             }
         } else {
             $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
@@ -553,8 +648,8 @@ class Hipay extends PaymentModule
                     $user_account = new HipayUserAccount($this);
                     $account = $user_account->getAccountInfos($params, false);
                     if (isset($account->code) && ($account->code == 0)) {
-                        $this->setConfigHiPay('sandbox_mode', false);
-                        $this->setConfigHiPay('welcome_message_shown',true);
+                        $this->setConfigHiPay('sandbox_mode', 0);
+                        $this->setConfigHiPay('welcome_message_shown',1);
                         return $this->registerExistingAccount($account,$params);
                     } else {
                         $this->_errors[] = $this->l('Authentication failed!');
@@ -568,7 +663,7 @@ class Hipay extends PaymentModule
             } catch (Exception $e) {
                 // LOGS
                 $this->logs->errorLogsHipay($e->getMessage());
-                $this->_errors[] = $this->l($e->getMessage());
+                $this->_errors[] = $this->l('error on the webservice, try again later or contact the support HiPay');
             }
         } else {
             $this->_warnings[] = $this->l('The credentials you have entered are invalid. Please try again.');
@@ -601,21 +696,18 @@ class Hipay extends PaymentModule
                     if (isset($account->code) && ($account->code == 0)) {
                         if ($this->registerExistingAccount($account, $params, $sandbox)) {
                             // after get user info production go to get user info sandbox
-                            if (!$sandbox) {
+                            if ($sandbox) {
                                 $this->majConfigurationByApi($user_account, true);
                             } else {
                                 return true;
                             }
-                        } else {
-                            // TODO LOGS
                         }
                     }
                 } catch (Exception $e) {
-                    // TODO LOGS
-                    $this->_errors[] = $this->l($e->getMessage());
+                    // LOGS
+                    $this->logs->errorLogsHipay($e->getMessage());
+                    $this->_errors[] = $this->l('error ont the webservice, try again later or contact the support HiPay');
                 }
-            } else {
-                // TODO LOGS
             }
             return false;
         }else{
@@ -639,14 +731,16 @@ class Hipay extends PaymentModule
                 'user_mail' => $websiteDefault->website_email,
             ];
         }
-        foreach($account->sub_accounts as $sub_account){
-            foreach($sub_account->websites as $website){
-                $user_mail[$sub_account->currency][$website->website_id] = $website->website_email;
-                $data[$sub_account->currency][$sub_account->user_account_id][] = [
-                    'user_account_id' => $sub_account->user_account_id,
-                    'website_id' => $website->website_id,
-                    'user_mail' => $website->website_email,
-                ];
+        if(isset($account->sub_accounts) && count($account->sub_accounts)>0) {
+            foreach ($account->sub_accounts as $sub_account) {
+                foreach ($sub_account->websites as $website) {
+                    $user_mail[$sub_account->currency][$website->website_id] = $website->website_email;
+                    $data[$sub_account->currency][$sub_account->user_account_id][] = [
+                        'user_account_id' => $sub_account->user_account_id,
+                        'website_id' => $website->website_id,
+                        'user_mail' => $website->website_email,
+                    ];
+                }
             }
         }
 
@@ -656,9 +750,20 @@ class Hipay extends PaymentModule
             'user_mail'                 => $user_mail,
             $prefix.'_ws_login'         => $params['ws_login'],
             $prefix.'_ws_password'      => $params['ws_password'],
+            $prefix.'_status'           => $account->activated,
+            'identified'                => $account->identified,
+            'bank_info_validated'       => $account->bank_info_validated,
+            $prefix.'_entity'           => $account->entity,
+            'welcome_message_shown'     => 1,
         ];
 
-        if($sandbox) unset($details['user_mail']);
+        if($sandbox){
+            unset($details['user_mail']);
+            unset($details[$prefix.'_status']);
+            unset($details['identified']);
+            unset($details['bank_info_validated']);
+            unset($details[$prefix.'_entity']);
+        }
 
         // save configuration hipay in database
         if(!$this->saveConfigurationDetails($details)){
@@ -740,13 +845,12 @@ class Hipay extends PaymentModule
 
         // settings configuration
         $objHipay->user_mail                   = '';
-        $objHipay->sandbox_mode                = false;
+        $objHipay->sandbox_mode                = 0;
         $objHipay->sandbox_ws_login            = '';
         $objHipay->sandbox_ws_password         = '';
-        $objHipay->production_status           = false;
         $objHipay->production_ws_login         = '';
         $objHipay->production_ws_password      = '';
-        $objHipay->welcome_message_shown       = false;
+        $objHipay->welcome_message_shown       = 0;
         $objHipay->entity                      = '';
         $objHipay->proxyUrl                    = '';
         $objHipay->proxyLogin                  = '';
@@ -757,11 +861,17 @@ class Hipay extends PaymentModule
 
         // payment button configuration
         $objHipay->payment_form_type           = 1;
-        $objHipay->manual_capture              = 1;
+        $objHipay->manual_capture              = 0;
         $objHipay->button_text_fr              = 'Payer par carte bancaire';
         $objHipay->button_text_en              = 'Pay by credit or debit card';
         $objHipay->button_images               = '';
-        $objHipay->mode_debug                  = true;
+        $objHipay->mode_debug                  = 1;
+
+        // information about the account
+        $objHipay->production_entity           = '';
+        $objHipay->bank_info_validated         = 0;
+        $objHipay->identified                  = 0;
+        $objHipay->production_status           = 0;
 
         return $this->setAllConfigHiPay($objHipay);
     }
@@ -821,7 +931,7 @@ class Hipay extends PaymentModule
             ];
 
             // save configuration sandbox mode and select informations
-            $this->setConfigHiPay('sandbox_mode', ($sandbox_mode ? true:false));
+            $this->setConfigHiPay('sandbox_mode', ($sandbox_mode ? 1:0));
             $this->setConfigHiPay('selected', $selected_config);
 
             $this->_successes[] = $this->l('Settings configuration saved successfully.');
@@ -929,14 +1039,12 @@ class Hipay extends PaymentModule
 
                 // Get infos WS and setting config
                 $acc_id = $result->account_id;
-                $this->configHipay->production->$currency_code->$acc_id = [
-                    array(
+                $this->configHipay->production[$currency_code][$acc_id][] = [
                         'user_account_id' => $result->account_id,
                         'website_id' => '',
                         'user_mail' => $result->mail,
-                    ),
-                ];
-                $this->configHipay->sandbox_mode            = 'false';
+                    ];
+                $this->configHipay->sandbox_mode            = 0;
                 $this->configHipay->production_status       = $result->status;
                 $this->configHipay->production_ws_login     = $result->wslogin;
                 $this->configHipay->production_ws_password  = $result->wspassword;
@@ -945,100 +1053,107 @@ class Hipay extends PaymentModule
                 $this->logs->logsHipay(print_r($this->configHipay,true));
                 // save configuration
                 return $this->setAllConfigHiPay();
-            }else{
-                return false;
             }
         }catch (Exception $e){
             // LOGS
             $this->logs->errorLogsHipay($e->getMessage());
-            $this->_errors[] = $this->l($e->getMessage());
+            $this->_errors[] = $this->l('error - captcha is not valid.');
         }
         return false;
     }
     protected function checkCodeValidation()
     {
-        $this->logs->logsHipay('---- >> function checkCodeValidation');
-        // get currency default
-        $currency       = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
-        $currency_code  = Tools::strtoupper($currency->iso_code);
-        // get validation code
-        $code           = (int)Tools::getValue('code_validator');
-        // this action active the account merchant
-        $user_account   = new HipayUserAccount($this);
-        $result         = $user_account->checkCodeValidation($code);
-        if($result && $result->status == 1)
-        {
-            $this->logs->logsHipay('---- >> account validated');
-            // if activation ok, creation website_id
-            $website = $user_account->createWebsite($currency_code);
-            if($website)
-            {
-                $this->logs->logsHipay('---- >> website created for account_id '.$website->account_id.' with ID = '.$website->website_id);
-                // init config with website
-                $email = Configuration::get('PS_SHOP_EMAIL');
-                $user_mail[$currency_code][$website->website_id] = $email;
-                $data[$currency_code][$website->account_id][] = [
-                    'user_account_id'   => $website->account_id,
-                    'website_id'        => $website->website_id,
-                    'user_mail'         => $email,
-                ];
-                $details = [
-                    'production'        => $data,
-                    'user_mail'         => $user_mail,
-                ];
+        try {
+            $this->logs->logsHipay('---- >> function checkCodeValidation');
+            // get currency default
+            $currency       = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
+            $currency_code  = Tools::strtoupper($currency->iso_code);
+            // get validation code
+            $code           = (int)Tools::getValue('code_validator');
+            // this action active the account merchant
+            $user_account   = new HipayUserAccount($this);
+            $result         = $user_account->checkCodeValidation($code, $currency_code);
 
-                // save configuration hipay in database
-                if($this->saveConfigurationDetails($details))
+            if($result && $result->status == 1)
+            {
+                $this->logs->logsHipay('---- >> account validated');
+                // if activation ok, creation website_id
+                $website = $user_account->createWebsite($currency_code);
+
+                if($website)
                 {
-                    $this->logs->logsHipay('---- >> save main account et website ');
-                    // If multi currencies duplicate the account
-                    $currencies = $this->getCurrencies();
-                    $this->logs->logsHipay('---- >> create sub-account et website ');
-                    foreach ($currencies as $key => $val) {
-                        if ($currency_code != $key) {
-                            $this->logs->logsHipay('---- >> duplicate main account to subaccount for the currency '.$key);
-                            // duplicate the account / website
-                            $sub_account = $user_account->duplicateByCurrency($key);
-                            if (!$sub_account) {
-                                $this->_errors[] = $this->l('error on the duplication of the account for the currency ') . $key;
-                            } else {
-                                // add website for subaccount
-                                $website_sub = $user_account->createWebsite($currency_code,$sub_account->subaccount_id);
-                                if($website_sub)
-                                {
-                                    $user_mail[$key][$website_sub->website_id] = $email;
-                                    $data[$key][$website_sub->account_id][] = [
-                                        'user_account_id' => $website_sub->account_id,
-                                        'website_id' => $website_sub->website_id,
-                                        'user_mail' => $email,
-                                    ];
-                                    // save configuration hipay in database
-                                    if(!$this->saveConfigurationDetails($details))
+                    $this->logs->logsHipay('---- >> website created for account_id '.$website->account_id.' with ID = '.$website->website_id);
+                    // init config with website
+                    $email = Configuration::get('PS_SHOP_EMAIL');
+                    $user_mail[$currency_code][$website->website_id] = $email;
+                    $data[$currency_code][$website->account_id][] = [
+                        'user_account_id'   => $website->account_id,
+                        'website_id'        => $website->website_id,
+                        'user_mail'         => $email,
+                    ];
+                    $details = [
+                        'production'        => $data,
+                        'user_mail'         => $user_mail,
+                    ];
+
+                    // save configuration hipay in database
+                    if($this->saveConfigurationDetails($details))
+                    {
+                        $this->logs->logsHipay('---- >> save main account et website ');
+                        // If multi currencies duplicate the account
+                        $currencies = $this->getCurrencies();
+                        $this->logs->logsHipay('---- >> create sub-account et website ');
+                        foreach ($currencies as $key => $val) {
+                            if ($currency_code != $key) {
+                                $this->logs->logsHipay('---- >> duplicate main account to subaccount for the currency '.$key);
+                                // duplicate the account / website
+                                $sub_account = $user_account->duplicateByCurrency($key);
+                                if (!$sub_account) {
+                                    $this->_errors[] = $this->l('error on the duplication of the account for the currency ') . $key;
+                                } else {
+                                    // add website for subaccount
+                                    $website_sub = $user_account->createWebsite($key,$sub_account->subaccount_id, $sub_account->parent_account_id, $currency_code);
+                                    if($website_sub)
                                     {
-                                        $this->_errors[] = $this->l('error on the insert of the website for the currency ') . $key;
+                                        $user_mail[$key][$website_sub->website_id] = $email;
+                                        $data[$key][$website_sub->account_id][] = [
+                                            'user_account_id' => $website_sub->account_id,
+                                            'website_id' => $website_sub->website_id,
+                                            'user_mail' => $email,
+                                        ];
+                                        // save configuration hipay in database
+                                        if(!$this->saveConfigurationDetails($details))
+                                        {
+                                            $this->_errors[] = $this->l('error on the insert of the website for the currency ') . $key;
+                                        }
                                     }
                                 }
-                            }
 
+                            }
                         }
+                        // active account
+                        $this->setConfigHiPay('production_status',1);
+                        return true;
+                    }else{
+                        $this->_errors[] = $this->l('error on the save of the configuration for the currency ') . $currency_code;
+                        return false;
                     }
-                    return true;
                 }else{
-                    $this->_errors[] = $this->l('error on the save of the configuration for the currency ') . $currency_code;
+                    $this->_errors[] = $this->l('error on the insert of the website for the currency ') . $currency_code;
                     return false;
                 }
-            }else{
-                $this->_errors[] = $this->l('error on the insert of the website for the currency ') . $currency_code;
+            } else {
+                // error validation code is incorrect
+                foreach($this->configHipay->production->$currency_code as $key=>$val){
+                    $this->context->smarty->assign('email', $this->configHipay->production->$currency_code->$key[0]['user_email']);
+                    break;
+                }
+                $this->_errors[] = $this->l('Validation code is incorrect, try again.');
                 return false;
             }
-        } else {
-            // error validation code is incorrect
-            $this->logs->errorLogsHipay($result->message);
-            foreach($this->configHipay->production->$currency_code as $key=>$account_id){
-                $this->context->smarty->assign('email', $account_id->$key[0]['user_email']);
-                break;
-            }
-            $this->_errors[] = $this->l('Validation code is incorrect, try again.');
+        }catch(Exception $e){
+            $this->logs->errorLogsHipay($e->getMessage());
+            $this->_errors[] = $this->l('Error API - problem on the control validation code');
             return false;
         }
     }

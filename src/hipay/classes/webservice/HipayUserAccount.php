@@ -20,6 +20,7 @@ class HipayUserAccount extends HipayREST
 {
     protected $accounts_currencies      = array();
     protected $client_url               = 'user-account';
+    protected $client_tools             = 'tools';
     protected $module                   = false;
     protected static $email_available   = null;
     protected $business_lines           = 18;
@@ -43,20 +44,31 @@ class HipayUserAccount extends HipayREST
     public function getCaptcha()
     {
         $params = [];
-        $result = $this->sendApiRequest($this->client_url.'/captcha','get', false, $params, false, true);
-        return ($result->code == 0) ? $result : false;
+        $result = $this->sendApiRequest($this->client_tools.'/captcha','get', false, $params, false, true);
+
+        if($result->code == 0) {
+            return $result;
+        }else{
+            throw new Exception(print_r($result,true));
+        }
     }
 
     /**
      * Check code to activate account merchant
      */
-    public function checkCodeValidation($code)
+    public function checkCodeValidation($code, $currency_code)
     {
+        // init val for webservice
         $params = [
-            'validation_code' => $code,
+            'validation_code'           => $code,
         ];
         $result = $this->sendApiRequest($this->client_url.'/check/code','post', true, $params, false, false);
-        return ($result->code == 0) ? $result : false;
+
+        if($result->code == 0) {
+            return $result;
+        }else{
+            throw new Exception(print_r($result,true));
+        }
     }
 
     /**
@@ -91,34 +103,80 @@ class HipayUserAccount extends HipayREST
 
         $this->module->logs->logsHipay(print_r($data, true));
 
-        $result = $this->sendApiRequest($this->client_url.'/create','post', false, $data, false, false);
+        $result = $this->sendApiRequest($this->client_url,'post', false, $data, false, false);
 
         $this->module->logs->logsHipay(print_r($result, true));
 
-        return ($result->code === 0) ? $result : false;
+        if($result->code == 0) {
+            return $result;
+        }else{
+            throw new Exception(print_r($result,true));
+        }
     }
 
     /**
      * Create an account in production
      */
-    public function createWebsite($currency)
+    public function createWebsite($currency,$account_id = 0, $parent_id = 0, $parent_currency = '')
     {
         // init params web service
         $email = Configuration::get('PS_SHOP_EMAIL');
-        foreach($this->configHipay->production->$currency as $key=>$account_id){
-            $email = $account_id->$key[0]['user_email'];
-            break;
+
+        // get infos
+        $config_prod    = $this->configHipay->production;
+
+        // object to array fix
+        $config_prod    = $this->module->object_to_array($config_prod);
+
+        $this->module->logs->logsHipay('currency en input = '.$currency);
+        $this->module->logs->logsHipay('account_id en input = '.$account_id);
+        $this->module->logs->logsHipay('parent currency en input = '.$parent_currency);
+        $this->module->logs->logsHipay('parent account_id en input = '.$parent_id);
+
+        // subaccount add website
+        if((int)$account_id > 0 && (int)$parent_id > 0){
+            $objCur         = $config_prod[$parent_currency];
+
+            $this->module->logs->logsHipay('parent_id = '.$parent_id.' account_id != 0 ');
+
+            $objAcc         = $objCur[$parent_id];
+            $email          = $objAcc[0]['user_mail'];
+
+            $this->module->logs->logsHipay('treatment subaccount with id = '.$account_id);
+
+        } else {
+            // account add website
+            $this->module->logs->logsHipay('account_id == 0 ');
+
+            $objCur         = $config_prod[$currency];
+            foreach($objCur as $key=>$val)
+            {
+                $objKey     = $objCur[$key];
+                $account_id = $key;
+                $email      = $objKey[0]['user_mail'];
+                break;
+            }
+            $this->module->logs->logsHipay('treatment account with id = '.$account_id);
         }
+
         $params = [
-            'name'          => Configuration::get('PS_SHOP_NAME'),
-            'url'           => Tools::getShopDomainSsl(true),
-            'contact_email' => $email,
-            'business_line' => $this->business_lines,
-            'topic'         => $this->website_topic,
+            'name'                      => Configuration::get('PS_SHOP_NAME'),
+            'url'                       => Tools::getShopDomainSsl(true),
+            'contact_email'             => $email,
+            'business_line'             => $this->business_lines,
+            'topic'                     => $this->website_topic,
+            'php-auth-subaccount-id'    => $account_id,
         ];
 
-        $result = $this->sendApiRequest($this->client_url.'/add/website','post', true, $params, false, false);
-        return ($result->code === 0) ? $result : false;
+        $this->module->logs->logsHipay(print_r($params,true));
+        // call api and execute create website
+        $result = $this->sendApiRequest($this->client_url.'/website','post', true, $params, false, false);
+
+        if($result->code == 0) {
+            return $result;
+        }else{
+            throw new Exception(print_r($result,true));
+        }
     }
 
     /**
@@ -130,7 +188,12 @@ class HipayUserAccount extends HipayREST
             'currency' => $currency,
         ];
         $result = $this->sendApiRequest($this->client_url.'/duplicate','post', true, $params, false, false);
-        return ($result->code == 0) ? $result : false;
+
+        if($result->code == 0) {
+            return $result;
+        }else{
+            throw new Exception(print_r($result,true));
+        }
     }
 
     /**
@@ -138,8 +201,13 @@ class HipayUserAccount extends HipayREST
      */
     public function getAccountInfos($params = [], $needLogin = true, $needSandboxLogin = false)
     {
-        $result = $this->sendApiRequest($this->client_url.'/get-infos','post', $needLogin, $params, $needSandboxLogin);
-        return ($result->code === 0) ? $result : false;
+        $result = $this->sendApiRequest($this->client_url,'get', $needLogin, $params, $needSandboxLogin);
+
+        if($result->code == 0) {
+            return $result;
+        }else{
+            throw new Exception(print_r($result,true));
+        }
     }
 
     /**

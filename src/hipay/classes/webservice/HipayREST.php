@@ -20,7 +20,7 @@ abstract class HipayREST
     protected $module = false;
 
     protected $rest_url = 'https://qa-merchant.hipaywallet.com/api';
-    protected $rest_test_url = 'https://test-merchant.hipaywallet.com/api';
+    protected $rest_test_url = 'https://qa-merchant.hipaywallet.com/api';
 
     public $configHipay;
     protected $RestLogin =false;
@@ -36,7 +36,7 @@ abstract class HipayREST
 
     public function getRestClientURL()
     {
-        if ((bool)$this->configHipay->sandbox_mode == false) {
+        if ( !(bool)$this->configHipay->sandbox_mode ) {
             return $this->rest_url;
         }
         return $this->rest_test_url;
@@ -50,8 +50,8 @@ abstract class HipayREST
             if ( $needSandboxLogin ) {
                 $url = $this->rest_test_url;
             }
-            if((bool)$needLogin) {
-                if ((bool)$this->configHipay->sandbox_mode) {
+            if($needLogin) {
+                if ( (bool)$this->configHipay->sandbox_mode ) {
                     $this->RestLogin = $this->configHipay->sandbox_ws_login;
                     $this->RestPassword = $this->configHipay->sandbox_ws_password;
                 } else {
@@ -71,6 +71,7 @@ abstract class HipayREST
                 }
             }
 
+
             //1 build http headers
             $header = array(
                 "Content-Type: application/json;charset=UTF-8",
@@ -79,7 +80,13 @@ abstract class HipayREST
                 "Pragma: no-cache",
             );
             if($this->RestLogin){
-                array_push($header,"php-auth-user:".$this->RestLogin,"php-auth-pw:".$this->RestPassword);
+                array_push($header,'Authorization: Basic '. base64_encode($this->RestLogin.":".$this->RestPassword));
+            }
+
+            //1bis Control php-auth-subaccount-id if exist in param
+            if (array_key_exists("php-auth-subaccount-id", $params)) {
+                array_push($header,'php-auth-subaccount-id:'.$params['php-auth-subaccount-id']);
+                unset($params['php-auth-subaccount-id']);
             }
 
             $ch = curl_init();

@@ -17,11 +17,13 @@
                 <div class="col-md-12 col-xs-12">
                     <!-- VALIDATOR ACCOUNT START -->
                     <h3 class="space-button2">{l s='Validate your account' mod='hipay'}</h3>
-                    <h3 class="space-button2">
-                        {l s='Thank you ! Your HiPay account has been created. In Order to validate it, please enter the validation code which has been sent to your e-mail address :' mod='hipay'}
-                        <br />
-                        <b>{if isset($email)}{$email}{/if}</b>
-                    </h3>
+                    <div class="row">
+                        <div class="col-lg-12">
+                            {l s='Thank you ! Your HiPay account has been created. In Order to validate it, please enter the validation code which has been sent to your e-mail address :' mod='hipay'}
+                            <br />
+                            <b>{if isset($email)}{$email}{/if}</b>
+                        </div>
+                    </div>
                     <div class="row">
                         <div class="col-lg-12">
                             <label class="control-label col-lg-2">
@@ -29,7 +31,7 @@
                                     {l s='Validation code:' mod='hipay'}
                                 </span>
                             </label>
-                            <div class="col-lg-10">
+                            <div class="col-lg-3">
                                 <input type="text" name="code_validator" id="code_validator" value="" class="lg">
                             </div>
                         </div>
