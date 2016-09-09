@@ -18,12 +18,12 @@
 <p class="payment_module hipay_payment_module">
 	{if $cart->getOrderTotal() < 2}
 		<a href="">
-			<img src="{$this_path}payment_button/{$logo_suffix}.png" alt="{l s='Pay with Hipay' mod='hipay'}" />
+			<img src="{$this_path}views/img/payment_button/{$logo_suffix}.png" alt="{l s='Pay with Hipay' mod='hipay'}" />
 			{l s='Minimum amount required in order to pay with Hipay:' mod='hipay'} {convertPrice price=2}
 		</a>
 	{else}
 	<a href="{$redirection_url}" title="{l s='Pay with Hipay' mod='hipay'}">
-		<img src="{$this_path}payment_button/{$logo_suffix}.png" alt="{l s='Pay with Hipay' mod='hipay'}" />
+		<img src="{$this_path}views/img/payment_button/{$logo_suffix}.png" alt="{l s='Pay with Hipay' mod='hipay'}" />
 		{l s='Pay with Hipay' mod='hipay'} {if !$hipay_prod}{l s='(sandbox / test mode)' mod='hipay'}{/if}
 	</a>
 	{/if}
