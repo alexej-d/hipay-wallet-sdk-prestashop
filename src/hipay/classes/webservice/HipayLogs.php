@@ -34,14 +34,7 @@ class HipayLogs
      */
     public function errorLogsHipay($msg)
     {
-        if($this->enable)
-        {
-            $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-error-logs.txt','a+');
-            fseek($fp,SEEK_END);
-            fputs($fp,'## ' . date('Y-m-d H:i:s') . ' ##' . PHP_EOL);
-            fputs($fp,$msg . PHP_EOL);
-            fclose($fp);
-        }
+        $this->writeLogs(0, $msg);
 
     }
 
@@ -52,9 +45,30 @@ class HipayLogs
      */
     public function logsHipay($msg)
     {
+        $this->writeLogs(1, $msg);
+
+    }
+    public function callbackLogs($msg)
+    {
+        $this->writeLogs(2, $msg);
+    }
+
+    private function writeLogs($code, $msg)
+    {
         if($this->enable)
         {
-            $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');
+            switch ($code)
+            {
+                case 0:
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-error-logs.txt','a+');
+                    break;
+                case 1:
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');
+                    break;
+                case 2:
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-callback.txt','a+');
+
+            }
             fseek($fp,SEEK_END);
             fputs($fp,'## ' . date('Y-m-d H:i:s') . ' ##' . PHP_EOL);
             fputs($fp,$msg . PHP_EOL );

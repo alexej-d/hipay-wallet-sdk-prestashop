@@ -21,10 +21,8 @@ abstract class HipayWS
     protected $client_url = false;
     protected $module = false;
 
-    protected $prestashop_api = 'https://payments.prestashop.com/psphipay';
-
-    protected $ws_url = 'https://ws.hipay.com';
-    protected $ws_test_url = 'https://test-ws.hipay.com';
+    protected $ws_url = 'https://qa-ws.hipay.com';
+    protected $ws_test_url = 'https://qa-ws.hipay.com';
 
     public $configHipay;
 
@@ -33,7 +31,7 @@ abstract class HipayWS
         $this->context = Context::getContext();
         $this->module = $module_instance;
         // init config hipay
-        $this->configHipay = $module_instance->configHipay;
+        $this->configHipay = $this->module->configHipay;
     }
 
     public function getWsId()
@@ -100,13 +98,11 @@ abstract class HipayWS
 
             if ((bool)$this->configHipay->sandbox_mode || $sandbox == true) {
                 $params = $params + array(
-                    'websiteId'     => $this->configHipay->sandbox_website_id,
                     'wsLogin'       => $this->configHipay->sandbox_ws_login,
                     'wsPassword'    => $this->configHipay->sandbox_ws_password,
                 );
             } else {
                 $params = $params + array(
-                    'websiteId'     => $this->configHipay->production_website_id,
                     'wsLogin'       => $this->configHipay->production_ws_login,    
                     'wsPassword'    => $this->configHipay->production_ws_password,
                 );
@@ -123,18 +119,4 @@ abstract class HipayWS
         }
     }
 
-    public function prestaShopWebservice($method, $data)
-    {
-        $options = array('http' => array(
-            'method'  => 'POST',
-            'header'  => 'Content-type: application/x-www-form-urlencoded',
-            'content' => http_build_query($data)
-        ));
-
-        $context  = stream_context_create($options);
-        $result = Tools::file_get_contents($this->prestashop_api.$method, false, $context);
-        $values = Tools::jsonDecode($result);
-
-        return isset($values->data) ? $values->data : false;
-    }
 }

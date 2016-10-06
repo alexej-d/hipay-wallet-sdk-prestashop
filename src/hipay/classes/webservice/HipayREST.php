@@ -62,7 +62,8 @@ abstract class HipayREST
                 if(isset($params['ws_login']) && !empty($params['ws_login'])){
                     $this->RestLogin    = $params['ws_login'];
                     $this->RestPassword = $params['ws_password'];
-                    $params = [];
+                    unset($params['ws_login']);
+                    unset($params['ws_password']);
                 }
                 if($no_login){
                     $this->RestLogin    = false;

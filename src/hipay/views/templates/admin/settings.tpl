@@ -10,6 +10,8 @@
 *
 *}
 <div class="panel">
+    <div id="setting-image-error" class="img-error"></div>
+    <div id="setting-image-success" class="img-success"></div>
     <form method="post" action="{$smarty.server.REQUEST_URI|escape:'htmlall'}" id="settings_form">
         <div class="row">
             <div class="col-md-12 col-xs-12">
@@ -26,7 +28,9 @@
                     </label>
                     <div class="col-lg-9">
                         <span class="switch prestashop-switch fixed-width-lg">
-                            <input type="radio" name="settings_switchmode" id="settings_switchmode_on" value="1" {if $config_hipay.sandbox_mode }checked="checked"{/if}>
+                            {if isset($config_hipay.sandbox_ws_login) && !empty($config_hipay.sandbox_ws_login) && isset($config_hipay.sandbox_ws_password) && !empty($config_hipay.sandbox_ws_password)}
+                                <input type="radio" name="settings_switchmode" id="settings_switchmode_on" value="1" {if $config_hipay.sandbox_mode }checked="checked"{/if}>
+                            {/if}
                             <label for="settings_switchmode_on">{l s='Yes'}</label>
                             <input type="radio" name="settings_switchmode" id="settings_switchmode_off" value="0" {if $config_hipay.sandbox_mode == false}checked="checked"{/if}>
                             <label for="settings_switchmode_off">{l s='No'}</label>
@@ -86,7 +90,7 @@
                                         {if !isset($config_hipay.production.$currency) || $config_hipay.production.$currency|@count == 0}
                                             <td colspan="2">
                                             <span class="icon icon-warning-sign" aria-hidden="true">
-                                                <a href="#">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
+                                                <a href="javascript:void(0);" id="production_duplication_{$currency}">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
                                             </span>
                                             </td>
                                         {else}
@@ -192,7 +196,7 @@
                                             {if !isset($config_hipay.sandbox.$currency) || $config_hipay.sandbox.$currency|@count == 0}
                                                 <td colspan="2">
                                                 <span class="icon icon-warning-sign" aria-hidden="true">
-                                                    <a href="#">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
+                                                    <a href="javascript:void(0);" id="sandbox_duplication_{$currency}">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
                                                 </span>
                                                 </td>
                                             {else}
@@ -251,8 +255,38 @@
 {* include file modal-login.tpl *}
 {include file='./modal-login.tpl'}
 
+{* modal info *}
+<div class="modal fade" id="hipay-info" tabindex="-1" role="dialog" aria-labelledby="hipay-info-title" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+                <h4 class="modal-title" id="hipay-info-title">{l s='HiPay information' mod='hipay'}</h4>
+            </div>
+            <div class="modal-body" id="hipay-info-message">
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{l s='Close' mod='hipay'}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
 <script type="text/javascript">
     jQuery( document ).ready(function() {
+
+        {* reload page when modal info closed *}
+
+        $('#hipay-info').on('hidden.bs.modal', function (e) {
+            location.reload();
+        });
 
         {*
          * init for dynamic selectbox the json website_id by user_account_id
@@ -293,5 +327,58 @@
                                 .text(value.website_id));
             });
          }
+
+        {foreach from=$selectedCurrencies key=currency item=options}
+            {if !isset($config_hipay.production.$currency) || $config_hipay.production.$currency|@count == 0}
+                $("#production_duplication_{$currency}").on('click', function() {
+                    $.ajax({
+                        url: '{$ajax_url}',
+                        dataType: 'json',
+                        cache: false,
+                        contentType: false,
+                        processData: false,
+                        data: 'controller=AdminHiPayConfig&action=Duplicate&ajax=true&sandbox=0&&currency={$currency}',
+                        type: 'get',
+                        success: function(jsonData)
+                        {
+                            if(jsonData.status == true){
+                                $("#hipay-info-message").html(jsonData.message);
+                                $('#hipay-info').modal('show');
+                            }else{
+                                $('#setting-image-error').html(jsonData.message);
+                                $('#setting-image-error').show();
+                                $('#setting-image-success').hide();
+                            }
+                        }
+                    });
+                });
+            {/if}
+            {if !isset($config_hipay.sandbox.$currency) || $config_hipay.sandbox.$currency|@count == 0}
+                $("#sandbox_duplication_{$currency}").on('click', function() {
+
+                    $.ajax({
+                        url: '{$ajax_url}',
+                        dataType: 'json',
+                        cache: false,
+                        contentType: false,
+                        processData: false,
+                        data: 'controller=AdminHiPayConfig&action=Duplicate&ajax=true&sandbox=1&currency={$currency}',
+                        type: 'get',
+                        success: function(jsonData)
+                        {
+                            if(jsonData.status == true){
+                                $("#hipay-info-message").html(jsonData.message);
+                                $('#hipay-info').modal('show');
+                            }else{
+                                $('#setting-image-error').html(jsonData.message);
+                                $('#setting-image-error').show();
+                                $('#setting-image-success').hide();
+                            }
+                        }
+                    });
+                });
+            {/if}
+        {/foreach}
+
     });
 </script>

@@ -25,11 +25,11 @@
 <div class="row">
 	<div class="col-xs-12 col-md-12">
 		<p class="payment_module" id="hipay_payment_button">
-			{if $cart->getOrderTotal() < 2}
+			{if $cart->getOrderTotal() < $min_amount}
 				<a href="#">
-					<img src="{$domain|cat:$payment_button|escape:'html':'UTF-8'}" alt="{l s='Pay by credit card' mod='hipay'}" class="pull-left" width="234px" height="57px" />
+					<img src="{$domain|cat:$payment_button|escape:'html':'UTF-8'}" alt="{if $lang == "fr"}{$configHipay.button_text_fr}{else}{$configHipay.button_text_en}{/if}" class="pull-left" width="234px" height="57px" />
 					<span>
-						{l s='Minimum amount required in order to pay by credit card:' mod='hipay' } {convertPrice price=2}
+						{l s='Minimum amount required in order to pay by credit card:' mod='hipay' } {convertPrice price=$min_amount}
 
 						{if isset($hipay_prod) && (!$hipay_prod)}
 							<em>{l s='(sandbox / test mode)' mod='hipay'}</em>
@@ -37,10 +37,10 @@
 					</span>
 				</a>
 			{else}
-				<a href="{$link->getModuleLink('hipay', 'redirect', array(), true)|escape:'htmlall':'UTF-8'}" title="{l s='Pay by credit card' mod='hipay'}">
-					<img src="{$domain|cat:$payment_button|escape:'html':'UTF-8'}" alt="{l s='Pay by credit card' mod='hipay'}" class="pull-left" width="234px" height="57px" />
+				<a href="{$link->getModuleLink('hipay', 'redirect', array(), true)|escape:'htmlall':'UTF-8'}" title="{if $lang == "fr"}{$configHipay.button_text_fr}{else}{$configHipay.button_text_en}{/if}">
+					<img src="{$domain|cat:$payment_button|escape:'html':'UTF-8'}" alt="{if $lang == "fr"}{$configHipay.button_text_fr}{else}{$configHipay.button_text_en}{/if}" class="pull-left" width="234px" height="57px" />
 					<span>
-						{l s='Pay by credit card' mod='hipay'}
+						{if $lang == "fr"}{$configHipay.button_text_fr}{else}{$configHipay.button_text_en}{/if}
 
 						{if isset($hipay_prod) && (!$hipay_prod)}
 							<em>{l s='(sandbox / test mode)' mod='hipay'}</em>

@@ -30,6 +30,7 @@ class Hipay extends PaymentModule
     public $configHipay;
     public $hipay_rating = [];
     public $create_account = false;
+    public $min_amount = 1;
     public static $available_rates_links = [
         'EN', 'FR', 'ES', 'DE',
         'IT', 'NL', 'PL', 'PT'
@@ -133,7 +134,7 @@ class Hipay extends PaymentModule
     {
         $class_names = [
             'AdminHiPayRefund',
-            'AdminHiPayPaymentbutton',
+            'AdminHiPayConfig',
         ];
         return $this->createTabAdmin($class_names);
     }
@@ -160,7 +161,7 @@ class Hipay extends PaymentModule
     {
         $class_names = [
             'AdminHiPayRefund',
-            'AdminHiPayPaymentbutton',
+            'AdminHiPayConfig',
         ];
         foreach ($class_names as $class_name) {
             $id_tab = (int)Tab::getIdFromClassName($class_name);
@@ -269,20 +270,25 @@ class Hipay extends PaymentModule
     }
     public function hookPayment($params)
     {
+        $currency_id = $params['cart']->id_currency;
+        $currency = new Currency((int)$currency_id);
+        $isocode_currency = $currency->iso_code;
 
-    	if ($this->configHipay->production_user_account_id || $this->configHipay->sandbox_user_account_id) {
+        $config_hipay = $this->configHipay;
+    	if ( (!$this->configHipay->sandbox_mode && $this->configHipay->selected->currencies->production->$isocode_currency->accountID)
+            || ($this->configHipay->sandbox_mode && $this->configHipay->selected->currencies->sandbox->$isocode_currency->accountID) ) {
 
-            $currency_id = $params['cart']->id_currency;
-            $currency = new Currency((int)$currency_id);
-
-            if (in_array($currency->iso_code, $this->limited_currencies) == false) {
+            if (in_array($isocode_currency, $this->limited_currencies) == false) {
                 return false;
             }
             
             $this->smarty->assign(array(
-                'domain' => Tools::getShopDomainSSL(true),
-                'module_dir' => $this->_path,
+                'domain'         => Tools::getShopDomainSSL(true),
+                'module_dir'     => $this->_path,
                 'payment_button' => $this->getPaymentButton(),
+                'min_amount'     => $this->min_amount,
+                'configHipay'    => $this->object_to_array($config_hipay),
+                'lang'           => Tools::strtolower($this->context->language->iso_code),
             ));
 
             $this->smarty->assign('hipay_prod', !(bool)$this->configHipay->sandbox_mode);
@@ -351,7 +357,7 @@ class Hipay extends PaymentModule
                 'selectedCurrencies'    => $selectedCurrencies,
                 'button_images'         => $images,
                 'url_images'            => $url_img,
-                'add_image_ajax_url'    => $this->context->link->getAdminLink('AdminHiPayPaymentbutton'),
+                'ajax_url'              => $this->context->link->getAdminLink('AdminHiPayConfig'),
             ));
             // init warning
             $this->getWarningHiPayStatus();
@@ -550,6 +556,30 @@ class Hipay extends PaymentModule
     }
 
     /**
+     * Get the appropriate payment button's image
+     * @return string
+     */
+    protected function getPaymentButton()
+    {
+        $img_selected = $this->configHipay->button_images;
+        if (!empty($img_selected) && file_exists(dirname(__FILE__).'/views/img/payment_buttons/'.$img_selected)) {
+            return $this->_path.'views/img/payment_buttons/'.$img_selected;
+        }
+        // image by default
+        return $this->_path.'views/img/payment_buttons/default.png';
+    }
+
+    /**
+     * Check if the given currency is supported by the provider
+     * @param string $iso_code currency iso code
+     * @return boolean
+     */
+    public function isSupportedCurrency($iso_code)
+    {
+        return in_array(Tools::strtoupper($iso_code), $this->limited_currencies);
+    }
+
+    /**
      * Load warning information if account merchant
      * is not activated, identified or bank infos status
      */
@@ -581,6 +611,7 @@ class Hipay extends PaymentModule
             $this->_warnings[] = $this->l('In order to identify yourself, we invite you to upload the following documents and to send them to us for validation on your HiPay merchant back office.');
         }
     }
+
     /**
      * Save configuration about account merchant
      * Login production and sandbox
@@ -671,7 +702,7 @@ class Hipay extends PaymentModule
         }
         return false;
     }
-    protected function majConfigurationByApi($user_account, $sandbox = false)
+    protected function majConfigurationByApi($user_account, $sandbox = 0)
     {
         $this->logs->logsHipay('---- >> function majConfigurationByApi');
         if(isset($this->configHipay->production_ws_login) && isset($this->configHipay->production_ws_password)) {
@@ -696,7 +727,7 @@ class Hipay extends PaymentModule
                     if (isset($account->code) && ($account->code == 0)) {
                         if ($this->registerExistingAccount($account, $params, $sandbox)) {
                             // after get user info production go to get user info sandbox
-                            if ($sandbox) {
+                            if (!$sandbox) {
                                 $this->majConfigurationByApi($user_account, true);
                             } else {
                                 return true;
@@ -733,13 +764,17 @@ class Hipay extends PaymentModule
         }
         if(isset($account->sub_accounts) && count($account->sub_accounts)>0) {
             foreach ($account->sub_accounts as $sub_account) {
-                foreach ($sub_account->websites as $website) {
-                    $user_mail[$sub_account->currency][$website->website_id] = $website->website_email;
-                    $data[$sub_account->currency][$sub_account->user_account_id][] = [
-                        'user_account_id' => $sub_account->user_account_id,
-                        'website_id' => $website->website_id,
-                        'user_mail' => $website->website_email,
-                    ];
+                if(isset($sub_account->websites) && count($sub_account->websites)>0) {
+                    foreach ($sub_account->websites as $website) {
+                        $user_mail[$sub_account->currency][$website->website_id] = $website->website_email;
+                        $data[$sub_account->currency][$sub_account->user_account_id][] = [
+                            'user_account_id' => $sub_account->user_account_id,
+                            'website_id'        => $website->website_id,
+                            'user_mail'         => $website->website_email,
+                            'callback_url'      => !empty($account->callback_url) ? $account->callback_url : '',
+                            'callback_salt'     => !empty($account->callback_salt) ? $account->callback_salt : '',
+                        ];
+                    }
                 }
             }
         }
@@ -872,6 +907,10 @@ class Hipay extends PaymentModule
         $objHipay->bank_info_validated         = 0;
         $objHipay->identified                  = 0;
         $objHipay->production_status           = 0;
+        $objHipay->production_callback_url     = '';
+        $objHipay->production_callback_salt    = '';
+        $objHipay->sandbox_callback_url        = '';
+        $objHipay->sandbox_callback_salt       = '';
 
         return $this->setAllConfigHiPay($objHipay);
     }
@@ -1042,7 +1081,7 @@ class Hipay extends PaymentModule
                 $this->configHipay->production[$currency_code][$acc_id][] = [
                         'user_account_id' => $result->account_id,
                         'website_id' => '',
-                        'user_mail' => $result->mail,
+                        'user_mail' => $result->email,
                     ];
                 $this->configHipay->sandbox_mode            = 0;
                 $this->configHipay->production_status       = $result->status;
@@ -1107,7 +1146,10 @@ class Hipay extends PaymentModule
                             if ($currency_code != $key) {
                                 $this->logs->logsHipay('---- >> duplicate main account to subaccount for the currency '.$key);
                                 // duplicate the account / website
-                                $sub_account = $user_account->duplicateByCurrency($key);
+                                $currency = [
+                                  'currency'=>$key,
+                                ];
+                                $sub_account = $user_account->duplicateByCurrency($currency);
                                 if (!$sub_account) {
                                     $this->_errors[] = $this->l('error on the duplication of the account for the currency ') . $key;
                                 } else {
@@ -1287,26 +1329,7 @@ class Hipay extends PaymentModule
 
         return false;
     }
-    /**
-     * Get the appropriate payment button's image
-     * @return string
-     */
-    protected function getPaymentButton()
-    {
-        $id_address = $this->context->cart->id_address_invoice;
 
-        if ($id_address) {
-            $address = new Address((int)$id_address);
-            $country = new Country((int)$address->id_country);
-            $iso_code = Tools::strtolower($country->iso_code);
-
-            if (file_exists(dirname(__FILE__).'/views/img/payment_buttons/'.$iso_code.'.png')) {
-                return $this->_path.'views/img/payment_buttons/'.$iso_code.'.png';
-            }
-        }
-
-        return $this->_path.'views/img/payment_buttons/default.png';
-    }
     protected function getTransactionId($details)
     {
         foreach ($details as $key => $value) {
@@ -1349,15 +1372,7 @@ class Hipay extends PaymentModule
         return false;
     }
 
-    /**
-     * Check if the given currency is supported by the provider
-     * @param string $iso_code currency iso code
-     * @return boolean
-     */
-    public function isSupportedCurrency($iso_code)
-    {
-        return in_array(Tools::strtoupper($iso_code), $this->limited_currencies);
-    }
+
 
     public function updateHiPayOrderStates()
     {

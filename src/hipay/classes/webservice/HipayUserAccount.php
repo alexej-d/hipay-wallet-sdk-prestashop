@@ -117,16 +117,16 @@ class HipayUserAccount extends HipayREST
     /**
      * Create an account in production
      */
-    public function createWebsite($currency,$account_id = 0, $parent_id = 0, $parent_currency = '')
+    public function createWebsite($currency,$account_id = 0, $parent_id = 0, $parent_currency = '', $sandbox = 0)
     {
         // init params web service
         $email = Configuration::get('PS_SHOP_EMAIL');
 
         // get infos
-        $config_prod    = $this->configHipay->production;
+        $config    = $sandbox ? $this->configHipay->sandbox : $this->configHipay->production;
 
         // object to array fix
-        $config_prod    = $this->module->object_to_array($config_prod);
+        $config    = $this->module->object_to_array($config);
 
         $this->module->logs->logsHipay('currency en input = '.$currency);
         $this->module->logs->logsHipay('account_id en input = '.$account_id);
@@ -135,7 +135,7 @@ class HipayUserAccount extends HipayREST
 
         // subaccount add website
         if((int)$account_id > 0 && (int)$parent_id > 0){
-            $objCur         = $config_prod[$parent_currency];
+            $objCur         = $config[$parent_currency];
 
             $this->module->logs->logsHipay('parent_id = '.$parent_id.' account_id != 0 ');
 
@@ -148,7 +148,7 @@ class HipayUserAccount extends HipayREST
             // account add website
             $this->module->logs->logsHipay('account_id == 0 ');
 
-            $objCur         = $config_prod[$currency];
+            $objCur         = $config[$currency];
             foreach($objCur as $key=>$val)
             {
                 $objKey     = $objCur[$key];
@@ -170,7 +170,7 @@ class HipayUserAccount extends HipayREST
 
         $this->module->logs->logsHipay(print_r($params,true));
         // call api and execute create website
-        $result = $this->sendApiRequest($this->client_url.'/website','post', true, $params, false, false);
+        $result = $this->sendApiRequest($this->client_url.'/website','post', !$sandbox, $params, $sandbox, false);
 
         if($result->code == 0) {
             return $result;
@@ -182,12 +182,9 @@ class HipayUserAccount extends HipayREST
     /**
      * Check code to activate account merchant
      */
-    public function duplicateByCurrency($currency)
+    public function duplicateByCurrency($params = [], $sandbox = false)
     {
-        $params = [
-            'currency' => $currency,
-        ];
-        $result = $this->sendApiRequest($this->client_url.'/duplicate','post', true, $params, false, false);
+        $result = $this->sendApiRequest($this->client_url.'/duplicate','post', !$sandbox, $params, $sandbox, false);
 
         if($result->code == 0) {
             return $result;

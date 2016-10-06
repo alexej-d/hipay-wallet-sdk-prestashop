@@ -14,6 +14,7 @@
 class HipayValidationModuleFrontController extends ModuleFrontController
 {
     public $configHipay;
+    public $logs;
 
     public function postProcess()
     {
@@ -21,22 +22,69 @@ class HipayValidationModuleFrontController extends ModuleFrontController
             die;
         }
 
+        $this->logs = new HipayLogs($this->module);
+
+        $this->logs->callbackLogs('##########################');
+        $this->logs->callbackLogs('START Validation Callback');
+        $this->logs->callbackLogs('##########################');
+
         if (Tools::getValue('xml')) {
-            $xml = Tools::getValue('xml');
-            $order = Tools::jsonDecode(Tools::jsonEncode((array)simplexml_load_string($xml)), 1);
+            // init and treatment value xml
+            $xml                        = Tools::getValue('xml');
+            $order                      = Tools::jsonDecode(Tools::jsonEncode((array)simplexml_load_string($xml)), 1);
+            $cart_id                    = (int)$order['result']['merchantDatas']['_aKey_cart_id'];
+            $customer_id                = (int)$order['result']['merchantDatas']['_aKey_customer_id'];
+            $secure_key                 = $order['result']['merchantDatas']['_aKey_secure_key'];
+            $amount                     = (float)$order['result']['origAmount'];
 
-            $cart_id = (int)$order['result']['merchantDatas']['_aKey_cart_id'];
-            $customer_id = (int)$order['result']['merchantDatas']['_aKey_customer_id'];
-            $secure_key = $order['result']['merchantDatas']['_aKey_secure_key'];
+            // Lock SQL - SELECT FOR UPDATE in cart_id
+            #################################################################
+            #################################################################
+            #################################################################
+            $sql = 'begin;';
+            $sql .= 'SELECT id_cart FROM ' . _DB_PREFIX_ . 'cart WHERE id_cart = ' . (int)$cart_id . ' FOR UPDATE;';
 
-            $amount = (float)$order['result']['origAmount'];
+            if (!Db::getInstance()->execute($sql)){
+                $this->logs->errorLogsHipay('----> Bad LockSQL initiated, Lock could not be initiated for id_cart = '.$cart_id);
+                die('Lock not initiated');
+            } else {
+                $this->logs->callbackLogs('----> Treatment is locked for the id_cart = '.$cart_id);
+            }
 
-            $this->context->cart = new Cart((int)$cart_id);
-            $this->context->customer = new Customer((int)$customer_id);
-            $this->context->currency = new Currency((int)$this->context->cart->id_currency);
-            $this->context->language = new Language((int)$this->context->customer->id_lang);
+            // Log data send to validation
+            $this->logs->callbackLogs('data for validation');
+            $this->logs->callbackLogs(print_r(
+                array(
+                    $xml         => $xml,
+                    $order       => $order,
+                    $cart_id     => $cart_id,
+                    $customer_id => $customer_id,
+                    $secure_key  => $secure_key,
+                    $amount      => $amount,
+                )
+            ));
 
-            return $this->registerOrder($order, $cart_id, $amount, $secure_key);
+            $this->context->cart        = new Cart((int)$cart_id);
+            $this->context->customer    = new Customer((int)$customer_id);
+            $this->context->currency    = new Currency((int)$this->context->cart->id_currency);
+            $this->context->language    = new Language((int)$this->context->customer->id_lang);
+
+            $return = $this->registerOrder($order, $cart_id, $amount, $secure_key);
+            $this->logs->callbackLogs('----> END registerOrder()');
+
+            // FIN du lock SQL - par un commit SQL
+            #################################################################
+            #################################################################
+            #################################################################
+            $sql = 'commit;';
+            if (!Db::getInstance()->execute($sql)){
+                $this->logs->errorLogsHipay('----> Bad LockSQL initiated, Lock could not be initiated for id_cart = '.$cart_id);
+                die('Lock not initiated');
+            } else {
+                $this->logs->callbackLogs('----> Treatment is unlocked for the id_cart = '.$cart_id);
+            }
+
+            return $return;
         }
 
         return $this->displayError('An error occurred while processing payment');
@@ -55,12 +103,19 @@ class HipayValidationModuleFrontController extends ModuleFrontController
 
     protected function registerOrder($order, $cart_id, $amount, $secure_key)
     {
-        if ($this->isValidOrder($order) === true) {
+        // LOGS
+        $this->logs->callbackLogs('----> START registerOrder()');
+        // ----
+        if ($this->isValidOrder($order) === true && $this->isValidSignature($order) === true) {
             $status = trim(Tools::strtolower($order['result']['status']));
             $currency = $this->context->currency;
 
-            switch ($status)
-            {
+            // LOGS
+            $this->logs->callbackLogs('Status = ' . $status);
+            $this->logs->callbackLogs('$currency = ' . $currency);
+            // ----
+
+            switch ($status) {
                 case 'ok':
                     $id_order_state = (int)Configuration::get('PS_OS_PAYMENT');
                     break;
@@ -78,7 +133,22 @@ class HipayValidationModuleFrontController extends ModuleFrontController
                     break;
             }
 
-            return $this->placeOrder($order, $id_order_state, $cart_id, $currency, $amount, $secure_key);
+            // LOGS
+            $this->logs->callbackLogs('id_order_state = ' . $id_order_state);
+            // ----
+
+            $return = $this->placeOrder($order, $id_order_state, $cart_id, $currency, $amount, $secure_key);
+
+            // LOGS
+            $this->logs->callbackLogs('----> END placeOrder()');
+            // ----
+
+            return $return;
+        } else {
+            // LOGS
+            $this->logs->errorLogsHipay('Token or signature are not valid');
+            // ----
+            return false;
         }
     }
 
@@ -91,14 +161,14 @@ class HipayValidationModuleFrontController extends ModuleFrontController
         }
 
         // init config HiPay
-        $configHipay = $this->module->configHipay;
+        $this->configHipay = $this->module->configHipay;
 
-        $sandbox_mode = (bool)$configHipay['sandbox_mode'];
+        $sandbox_mode = (bool)$this->configHipay->sandbox_mode;
 
         if ($sandbox_mode) {
-            $ws_login = (int)$configHipay['sandbox_ws_login'];
+            $ws_login = $this->configHipay->sandbox_ws_login;
         } else {
-            $ws_login = (int)$configHipay['production_ws_login'];
+            $ws_login = $this->configHipay->production_ws_login;
         }
 
         $valid_secure_key = ($this->context->customer->secure_key == $order['result']['merchantDatas']['_aKey_secure_key']);
@@ -107,14 +177,58 @@ class HipayValidationModuleFrontController extends ModuleFrontController
         return $valid_secure_key && $valid_token;
     }
 
+    protected function isValidSignature($order)
+    {
+        if (isset($order['result']) == false) {
+            return false;
+        } elseif ((isset($order['result']['status']) == false) || (isset($order['result']['merchantDatas']) == false)) {
+            return false;
+        }
+
+        $string_for_hash = implode("", $order['result']);
+        $callback_salt   = '';
+        // init config HiPay
+        $this->configHipay = $this->module->configHipay;
+        $sandbox_mode = (bool)$this->configHipay->sandbox_mode;
+        if ($sandbox_mode) {
+            $callback_salt = $this->configHipay->sandbox_callback_salt;
+        } else {
+            $callback_salt = $this->configHipay->production_callback_salt;
+        }
+
+        // init MD5
+        $md5 = md5($string_for_hash . $callback_salt);
+
+        if($md5 == $order['md5content'])
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     protected function placeOrder($order, $id_order_state, $cart_id, $currency, $amount, $secure_key)
     {
+        // LOGS
+        $this->logs->callbackLogs('----> START placeOrder()');
+        // ----
+
         $order_id = (int)Order::getOrderByCartId($cart_id);
 
         if ((bool)$order_id != false) {
+
+            // LOGS
+            $this->logs->callbackLogs('Treatment an existing order');
+            // ----
+
             $order = new Order($order_id);
 
             if ((int)$order->getCurrentState() == (int)Configuration::get('HIPAY_OS_WAITING')) {
+
+                // LOGS
+                $this->logs->callbackLogs('If current status order = HIPAY_OS_WAITING Then change status with this id_status = '. $id_order_state);
+                // ----
+
                 $order_history = new OrderHistory();
                 
                 $order_history->id_order = $order_id;
@@ -124,9 +238,17 @@ class HipayValidationModuleFrontController extends ModuleFrontController
                 return $order_history->addWithemail();
             }
 
+            // LOGS
+            $this->logs->callbackLogs('An error occurred while saving transaction details');
+            // ----
             return $this->displayError('An error occurred while saving transaction details');
         } else {
             if ($id_order_state != (int)Configuration::get('PS_OS_ERROR')) {
+
+                // LOGS
+                $this->logs->callbackLogs('Treatment status = ' . $id_order_state);
+                // ----
+
                 $payment_method = $order['result']['paymentMethod'];
                 $transaction_id = $order['result']['transid'];
 
@@ -144,11 +266,17 @@ class HipayValidationModuleFrontController extends ModuleFrontController
                 ]);
 
             } else {
+                // LOGS
+                $this->logs->callbackLogs('Treatment status = ERROR');
+                // ----
                 $extra_vars     = [];
                 $error_details  = Tools::safeOutput(print_r($order['result'], true));
                 $message        = Tools::jsonEncode(["Error" => $error_details]);
             }
 
+            // LOGS
+            $this->logs->callbackLogs('Validate order');
+            // ----
             return $this->module->validateOrder($cart_id, $id_order_state, $amount, $this->module->displayName, $message, $extra_vars, (int)$currency->id, false, $secure_key);
         }
     }

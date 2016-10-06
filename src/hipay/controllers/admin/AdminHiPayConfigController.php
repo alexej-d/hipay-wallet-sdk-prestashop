@@ -15,7 +15,7 @@ define('MAX_SIZE', 300000);  // max weight
 define('WIDTH_MAX', 400);    // max width
 define('HEIGHT_MAX', 400);   // max height
 
-class AdminHiPayPaymentbuttonController extends ModuleAdminController
+class AdminHiPayConfigController extends ModuleAdminController
 {
     public function __construct()
     {
@@ -26,6 +26,9 @@ class AdminHiPayPaymentbuttonController extends ModuleAdminController
         }
     }
 
+    /**
+     * Upload ajax images payment button
+     */
     public function ajaxProcessImageButtons()
     {
         $tabExt = array('jpg','gif','png','jpeg');
@@ -110,6 +113,60 @@ class AdminHiPayPaymentbuttonController extends ModuleAdminController
                 'status' => false,
                 'message' => $message,
             ];
+        }
+        die(Tools::jsonEncode($return));
+    }
+
+    /**
+     * Duplicate an account HiPay + add new website
+     */
+    public function ajaxProcessDuplicate()
+    {
+        $return = [];
+
+        // get currency default
+        $currency       = new Currency(Configuration::get('PS_CURRENCY_DEFAULT'));
+        $currency_code  = Tools::strtoupper($currency->iso_code);
+
+        // get val
+        $currency = Tools::getValue('currency');
+        $sandbox  = (bool)Tools::getValue('sandbox');
+
+
+        // duplicate the account / website
+        $user_account = new HipayUserAccount($this->module);
+        if($sandbox) {
+            $params = [
+                'currency' => $currency,
+                'ws_login' => $this->module->configHipay->sandbox_ws_login,
+                'ws_password' => $this->module->configHipay->sandbox_ws_password,
+            ];
+            $sub_account = $user_account->duplicateByCurrency($params, $sandbox);
+        }else{
+            $params = [
+                'currency' => $currency,
+            ];
+            $sub_account = $user_account->duplicateByCurrency($params);
+        }
+
+        if (!$sub_account) {
+            $this->_errors[] = $this->l('error on the duplication of the account for the currency ') . $currency;
+        } else {
+            // add website for subaccount
+            $website_sub = $user_account->createWebsite($currency,$sub_account->subaccount_id, $sub_account->parent_account_id, $currency_code, $sandbox);
+            if($website_sub->code == 0)
+            {
+                $return = [
+                    'status' => 1,
+                    'message'=> $this->module->l('Subaccount created for the currency '. $currency),
+                ];
+
+            } else {
+                $return = [
+                    'status' => 0,
+                    'message'=> $website_sub->message,
+                ];
+            }
         }
         die(Tools::jsonEncode($return));
     }

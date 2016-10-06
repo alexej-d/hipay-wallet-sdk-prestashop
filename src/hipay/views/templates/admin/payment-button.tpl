@@ -143,12 +143,12 @@
             var file_data = $('#specific_button').prop('files')[0];
             var form_data = new FormData();
             form_data.append('file', file_data);
-            form_data.append('controller', 'AdminHiPayPaymentbutton');
+            form_data.append('controller', 'AdminHiPayConfig');
             form_data.append('action', 'ImageButtons');
             form_data.append('ajax', true);
 
             $.ajax({
-                url: '{$add_image_ajax_url}', // point to server-side PHP script
+                url: '{$ajax_url}', // point to server-side PHP script
                 dataType: 'json',
                 cache: false,
                 contentType: false,
