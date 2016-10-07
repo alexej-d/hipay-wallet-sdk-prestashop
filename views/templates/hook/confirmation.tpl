@@ -19,5 +19,5 @@
 	<br /><br />
 	{l s='You have chosen the HiPay method.' mod='hipay'}
 	<br /><br /><span class="bold">{l s='Your order will be sent very soon.' mod='hipay'}</span>
-	<br /><br />{l s='For any questions or for further information, please contact our' mod='hipay'} <a href="{$link->getPageLink('contact', true)}" target="_blank">{l s='customer support' mod='hipay'}</a>.
+	<br /><br />{l s='For any questions or for further information, please contact our' mod='hipay'} <a href="{$link->getPageLink('contact', true)|escape:'htmlall':'UTF-8'}" target="_blank">{l s='customer support' mod='hipay'}</a>.
 </p>
