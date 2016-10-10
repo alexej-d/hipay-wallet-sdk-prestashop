@@ -52,6 +52,10 @@ class HipayLogs
     {
         $this->writeLogs(2, $msg);
     }
+    public function requestLogs($msg)
+    {
+        $this->writeLogs(3, $msg);
+    }
 
     private function writeLogs($code, $msg)
     {
@@ -67,7 +71,13 @@ class HipayLogs
                     break;
                 case 2:
                     $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-callback.txt','a+');
-
+                    break;
+                case 3:
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-request-new-order.txt','a+');
+                    break;
+                default:
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');
+                    break;
             }
             fseek($fp,SEEK_END);
             fputs($fp,'## ' . date('Y-m-d H:i:s') . ' ##' . PHP_EOL);

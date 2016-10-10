@@ -22,6 +22,7 @@ class HipayPayment extends HipayWS
     protected $categories_domain = 'https://qa-payment.hipay.com/';
     protected $categories_test_domain = 'https://qa-payment.hipay.com/';
     protected $categories_url = 'order/list-categories/id/';
+    protected $logs;
 
     protected $client_url = '/soap/payment-v2';
 
@@ -34,10 +35,18 @@ class HipayPayment extends HipayWS
         $currency = new Currency($currency_id);
         $isocode_currency = $currency->iso_code;
 
+        // init logs
+        $this->logs = new HipayLogs($this->module);
+
+        $this->logs->requestLogs('##########################');
+        $this->logs->requestLogs('# Début Request New Order');
+        $this->logs->requestLogs('##########################');
+
         // control if auth ws is ok or not
         if ( (!$configHipay->sandbox_mode && !$configHipay->selected->currencies->production->$isocode_currency->accountID)
             || ($configHipay->sandbox_mode && !$configHipay->selected->currencies->sandbox->$isocode_currency->accountID) )
         {
+            $this->logs->errorLogsHipay('ERROR : An error occurred while redirecting to the payment processor');
             die(Tools::displayError('An error occurred while redirecting to the payment processor'));
         }
 
@@ -96,7 +105,13 @@ class HipayPayment extends HipayWS
             'freeData'          => $free_data,
         ];
 
+        $this->logs->requestLogs(print_r($params));
+
         $results = $this->executeQuery('generate', $params);
+
+        $this->logs->requestLogs('##########################');
+        $this->logs->requestLogs('# Fin Request New Order');
+        $this->logs->requestLogs('##########################');
 
         return ($results->generateResult->code === 0) ? Tools::redirect($results->generateResult->redirectUrl) : false;
     }
