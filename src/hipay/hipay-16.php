@@ -760,6 +760,8 @@ class Hipay extends PaymentModule
                 'user_account_id' => $account->user_account_id,
                 'website_id' => $websiteDefault->website_id,
                 'user_mail' => $websiteDefault->website_email,
+                'callback_url'      => !empty($account->callback_url) ? $account->callback_url : '',
+                'callback_salt'     => !empty($account->callback_salt) ? $account->callback_salt : '',
             ];
         }
         if(isset($account->sub_accounts) && count($account->sub_accounts)>0) {
@@ -771,8 +773,8 @@ class Hipay extends PaymentModule
                             'user_account_id' => $sub_account->user_account_id,
                             'website_id'        => $website->website_id,
                             'user_mail'         => $website->website_email,
-                            'callback_url'      => !empty($account->callback_url) ? $account->callback_url : '',
-                            'callback_salt'     => !empty($account->callback_salt) ? $account->callback_salt : '',
+                            'callback_url'      => !empty($sub_account->callback_url) ? $sub_account->callback_url : '',
+                            'callback_salt'     => !empty($sub_account->callback_salt) ? $sub_account->callback_salt : '',
                         ];
                     }
                 }

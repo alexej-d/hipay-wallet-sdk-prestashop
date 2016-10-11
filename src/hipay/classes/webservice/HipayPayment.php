@@ -105,7 +105,7 @@ class HipayPayment extends HipayWS
             'freeData'          => $free_data,
         ];
 
-        $this->logs->requestLogs(print_r($params));
+        $this->logs->requestLogs(print_r($params, true));
 
         $results = $this->executeQuery('generate', $params);
 

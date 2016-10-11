@@ -185,19 +185,37 @@ class HipayValidationModuleFrontController extends ModuleFrontController
             return false;
         }
 
-        $string_for_hash = implode("", $order['result']);
-        $callback_salt   = '';
         // init config HiPay
         $this->configHipay = $this->module->configHipay;
-        $sandbox_mode = (bool)$this->configHipay->sandbox_mode;
+
+        $xml            = new SimpleXMLElement(Tools::getValue('xml'));
+        $currency       = $xml->result->origCurrency;
+        $callback_salt  = '';
+        $sandbox_mode   = (bool)$this->configHipay->sandbox_mode;
+        // get callback_salt for the accountID, websiteID and the currency of the transaction
         if ($sandbox_mode) {
-            $callback_salt = $this->configHipay->sandbox_callback_salt;
+
+            $accountId      = $this->configHipay->selected->currencies->sandbox->$currency->accounID;
+            $websiteId      = $this->configHipay->selected->currencies->sandbox->$currency->websiteID;
+            $accountInfo    = $this->configHipay->sandbox->$currency->$accountId;
+
         } else {
-            $callback_salt = $this->configHipay->production_callback_salt;
+
+            $accountId      = $this->configHipay->selected->currencies->production->$currency->accounID;
+            $websiteId      = $this->configHipay->selected->currencies->production->$currency->websiteID;
+            $accountInfo    = $this->configHipay->production->$currency->$accountId;
+
+        }
+
+        foreach($accountInfo as $value){
+            if($value->website_id == $websiteId){
+                $callback_salt  = $value->callback_salt;
+                break;
+            }
         }
 
         // init MD5
-        $md5 = md5($string_for_hash . $callback_salt);
+        $md5 = hash('md5', $xml->result->asXml() . $callback_salt);
 
         if($md5 == $order['md5content'])
         {
