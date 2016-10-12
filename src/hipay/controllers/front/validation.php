@@ -55,13 +55,13 @@ class HipayValidationModuleFrontController extends ModuleFrontController
             $this->logs->callbackLogs('data for validation');
             $this->logs->callbackLogs(print_r(
                 array(
-                    $xml         => $xml,
-                    $order       => $order,
-                    $cart_id     => $cart_id,
-                    $customer_id => $customer_id,
-                    $secure_key  => $secure_key,
-                    $amount      => $amount,
-                )
+                    $xml,
+                    $order,
+                    $cart_id,
+                    $customer_id,
+                    $secure_key,
+                    $amount,
+                ),true
             ));
 
             $this->context->cart        = new Cart((int)$cart_id);
@@ -106,13 +106,13 @@ class HipayValidationModuleFrontController extends ModuleFrontController
         // LOGS
         $this->logs->callbackLogs('----> START registerOrder()');
         // ----
-        if ($this->isValidOrder($order) === true && $this->isValidSignature($order) === true) {
+        if ($this->isValidSignature($order) === true) {
             $status = trim(Tools::strtolower($order['result']['status']));
             $currency = $this->context->currency;
 
             // LOGS
             $this->logs->callbackLogs('Status = ' . $status);
-            $this->logs->callbackLogs('$currency = ' . $currency);
+            $this->logs->callbackLogs('$currency = ' . $currency->iso_code);
             // ----
 
             switch ($status) {
@@ -152,33 +152,14 @@ class HipayValidationModuleFrontController extends ModuleFrontController
         }
     }
 
-    protected function isValidOrder($order)
-    {
-        if (isset($order['result']) == false) {
-            return false;
-        } elseif ((isset($order['result']['status']) == false) || (isset($order['result']['merchantDatas']) == false)) {
-            return false;
-        }
-
-        // init config HiPay
-        $this->configHipay = $this->module->configHipay;
-
-        $sandbox_mode = (bool)$this->configHipay->sandbox_mode;
-
-        if ($sandbox_mode) {
-            $ws_login = $this->configHipay->sandbox_ws_login;
-        } else {
-            $ws_login = $this->configHipay->production_ws_login;
-        }
-
-        $valid_secure_key = ($this->context->customer->secure_key == $order['result']['merchantDatas']['_aKey_secure_key']);
-        $valid_token = (Tools::encrypt($ws_login.$order['result']['merchantDatas']['_aKey_cart_id']) == $order['result']['merchantDatas']['_aKey_token']);
-
-        return $valid_secure_key && $valid_token;
-    }
-
     protected function isValidSignature($order)
     {
+        // init variables
+        $callback_salt  = '';
+        $accountId      = '';
+        $websiteId      = '';
+        $accountInfo    = '';
+
         if (isset($order['result']) == false) {
             return false;
         } elseif ((isset($order['result']['status']) == false) || (isset($order['result']['merchantDatas']) == false)) {
@@ -189,8 +170,7 @@ class HipayValidationModuleFrontController extends ModuleFrontController
         $this->configHipay = $this->module->configHipay;
 
         $xml            = new SimpleXMLElement(Tools::getValue('xml'));
-        $currency       = $xml->result->origCurrency;
-        $callback_salt  = '';
+        $currency       = $order['result']['origCurrency'];
         $sandbox_mode   = (bool)$this->configHipay->sandbox_mode;
         // get callback_salt for the accountID, websiteID and the currency of the transaction
         if ($sandbox_mode) {
@@ -206,7 +186,7 @@ class HipayValidationModuleFrontController extends ModuleFrontController
             $accountInfo    = $this->configHipay->production->$currency->$accountId;
 
         }
-
+        $this->logs->callbackLogs('accountID:'.$accountId.' / websiteId:'.$websiteId);
         foreach($accountInfo as $value){
             if($value->website_id == $websiteId){
                 $callback_salt  = $value->callback_salt;
@@ -216,6 +196,13 @@ class HipayValidationModuleFrontController extends ModuleFrontController
 
         // init MD5
         $md5 = hash('md5', $xml->result->asXml() . $callback_salt);
+
+        // Logs
+        $this->logs->callbackLogs($xml->result->asXml() . $callback_salt);
+        $this->logs->callbackLogs('currency : ' . $currency);
+        $this->logs->callbackLogs('accountID:'.$accountId.' / websiteId:'.$websiteId);
+        $this->logs->callbackLogs('callback_salt : ' . $callback_salt);
+        $this->logs->callbackLogs('md5 : '. $md5 . ' == md5content : ' . $order['md5content']);
 
         if($md5 == $order['md5content'])
         {
@@ -273,9 +260,9 @@ class HipayValidationModuleFrontController extends ModuleFrontController
                 $extra_vars = ['transaction_id' => Tools::safeOutput($transaction_id)];
 
                  // init config HiPay
-                $configHipay = $this->module->configHipay;
+                $this->configHipay = $this->module->configHipay;
 
-                $sandbox_mode = (bool)$configHipay['sandbox_mode'];
+                $sandbox_mode = (bool)$this->configHipay->sandbox_mode;
 
                 $message = Tools::jsonEncode([
                     "Environment"       => $sandbox_mode ? 'SANDBOX' : 'PRODUCTION',
@@ -287,15 +274,32 @@ class HipayValidationModuleFrontController extends ModuleFrontController
                 // LOGS
                 $this->logs->callbackLogs('Treatment status = ERROR');
                 // ----
-                $extra_vars     = [];
                 $error_details  = Tools::safeOutput(print_r($order['result'], true));
                 $message        = Tools::jsonEncode(["Error" => $error_details]);
             }
 
             // LOGS
             $this->logs->callbackLogs('Validate order');
+            $this->logs->callbackLogs(print_r(array(
+                $cart_id,
+                $id_order_state,
+                $amount,
+                $this->module->displayName,
+                $message,
+                $extra_vars,
+                (int)$currency->id,
+                $secure_key),true
+            ));
             // ----
-            return $this->module->validateOrder($cart_id, $id_order_state, $amount, $this->module->displayName, $message, $extra_vars, (int)$currency->id, false, $secure_key);
+
+            if( $this->module->validateOrder((int)$cart_id,(int)$id_order_state,(float)$amount, $this->module->displayName, $message, $extra_vars, (int)$currency->id, false, $secure_key)){
+                $this->logs->callbackLogs('Order created');
+                return true;
+            }else{
+                $this->logs->callbackLogs('Order is not created');
+                return false;
+            }
+
         }
     }
 }
