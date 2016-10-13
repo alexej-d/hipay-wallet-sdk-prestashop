@@ -93,11 +93,11 @@ class HipayPayment extends HipayWS
             'manualCapture'     => (int)false,
             'rating'            => $rating,
             'wsSubAccountId'    => $wesbite_account_id,
-            'wsSubAccountLogin' => $wesbite_email,
+            'method'            => (!$configHipay->payment_form_type ? 'iframe':''),
 
             // URLs
             'urlAccept'         => $accept_url,
-            'urlCallback'       => 'http://s621260625.onlinehome.fr/send-notif.php?to=jprotin@hipay.com',//$callback_url,
+            'urlCallback'       => $callback_url,
             'urlCancel'         => $cancel_url,
             'urlDecline'        => $decline_url,
             'urlLogo'           => $logo_url,
@@ -113,7 +113,15 @@ class HipayPayment extends HipayWS
         $this->logs->requestLogs('# Fin Request New Order');
         $this->logs->requestLogs('##########################');
 
-        return ($results->generateResult->code === 0) ? Tools::redirect($results->generateResult->redirectUrl) : false;
+        // if method hosted redirection to hipay hosted page
+        if($configHipay->payment_form_type){
+            $this->logs->requestLogs('Redirection mode Hosted page');
+            return ($results->generateResult->code === 0) ? Tools::redirect($results->generateResult->redirectUrl) : false;
+        }else{
+            // else method iframe
+            $this->logs->requestLogs('Redirection mode iFrame');
+            return ($results->generateResult->code === 0) ? $results->generateResult : false;
+        }
     }
 
     protected function getFreeData()

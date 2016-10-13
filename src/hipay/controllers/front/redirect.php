@@ -34,6 +34,18 @@ class HipayRedirectModuleFrontController extends ModuleFrontController
         if ($payment->generate($results) == false) {
             $description = $results->generateResult->description;
             $this->displayError('An error occurred while getting transaction informations', $description);
+        } else {
+            // ctrl if iframe
+            if( !$this->module->configHipay->payment_form_type ){
+                $this->context->smarty->assign(array(
+                    'iframe_url'    => $results->generateResult->redirectUrl,
+                    'cart_id'       => $this->context->cart->id,
+                    'currency'      => $this->context->currency->iso_code,
+                    'amount'        => $this->context->cart->getOrderTotal(true, Cart::BOTH),
+                ));
+                // show the iframe page in Prestashop
+                return $this->setTemplate('16_iframe.tpl');
+            }
         }
     }
 
