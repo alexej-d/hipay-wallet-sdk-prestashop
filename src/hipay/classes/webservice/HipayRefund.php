@@ -1,6 +1,6 @@
 <?php
 /**
-* 2015 HiPay
+* 2016 HiPay
 *
 * NOTICE OF LICENSE
 *

@@ -1,6 +1,6 @@
 <?php
 /**
-* 2015 HiPay
+* 2016 HiPay
 *
 * NOTICE OF LICENSE
 *
@@ -175,13 +175,13 @@ class HipayValidationModuleFrontController extends ModuleFrontController
         // get callback_salt for the accountID, websiteID and the currency of the transaction
         if ($sandbox_mode) {
 
-            $accountId      = $this->configHipay->selected->currencies->sandbox->$currency->accounID;
+            $accountId      = $this->configHipay->selected->currencies->sandbox->$currency->accountID;
             $websiteId      = $this->configHipay->selected->currencies->sandbox->$currency->websiteID;
             $accountInfo    = $this->configHipay->sandbox->$currency->$accountId;
 
         } else {
 
-            $accountId      = $this->configHipay->selected->currencies->production->$currency->accounID;
+            $accountId      = $this->configHipay->selected->currencies->production->$currency->accountID;
             $websiteId      = $this->configHipay->selected->currencies->production->$currency->websiteID;
             $accountInfo    = $this->configHipay->production->$currency->$accountId;
 
@@ -244,7 +244,7 @@ class HipayValidationModuleFrontController extends ModuleFrontController
             }
 
             // LOGS
-            $this->logs->callbackLogs('An error occurred while saving transaction details');
+            $this->logs->callbackLogs('getCurrentState ' . $order->getCurrentState() . ' != HIPAY_OS_WAITING ' . Configuration::get('HIPAY_OS_WAITING'));
             // ----
             return $this->displayError('An error occurred while saving transaction details');
         } else {

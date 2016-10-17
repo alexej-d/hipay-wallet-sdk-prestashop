@@ -730,6 +730,7 @@ class Hipay extends PaymentModule
                             if (!$sandbox) {
                                 $this->majConfigurationByApi($user_account, true);
                             } else {
+                                $this->preloadConfig($sandbox);
                                 return true;
                             }
                         }
@@ -888,7 +889,6 @@ class Hipay extends PaymentModule
         $objHipay->production_ws_login         = '';
         $objHipay->production_ws_password      = '';
         $objHipay->welcome_message_shown       = 0;
-        $objHipay->entity                      = '';
         $objHipay->proxyUrl                    = '';
         $objHipay->proxyLogin                  = '';
         $objHipay->proxyPassword               = '';
@@ -901,7 +901,7 @@ class Hipay extends PaymentModule
         $objHipay->manual_capture              = 0;
         $objHipay->button_text_fr              = 'Payer par carte bancaire';
         $objHipay->button_text_en              = 'Pay by credit or debit card';
-        $objHipay->button_images               = '';
+        $objHipay->button_images               = 'default.png';
         $objHipay->mode_debug                  = 1;
 
         // information about the account
@@ -909,10 +909,6 @@ class Hipay extends PaymentModule
         $objHipay->bank_info_validated         = 0;
         $objHipay->identified                  = 0;
         $objHipay->production_status           = 0;
-        $objHipay->production_callback_url     = '';
-        $objHipay->production_callback_salt    = '';
-        $objHipay->sandbox_callback_url        = '';
-        $objHipay->sandbox_callback_salt       = '';
 
         return $this->setAllConfigHiPay($objHipay);
     }
@@ -1089,7 +1085,7 @@ class Hipay extends PaymentModule
                 $this->configHipay->production_status       = $result->status;
                 $this->configHipay->production_ws_login     = $result->wslogin;
                 $this->configHipay->production_ws_password  = $result->wspassword;
-                $this->configHipay->entity                  = 'direct';
+                $this->configHipay->production_entity       = 'direct';
 
                 $this->logs->logsHipay(print_r($this->configHipay,true));
                 // save configuration
@@ -1246,18 +1242,6 @@ class Hipay extends PaymentModule
         }
 
     }
-
-    #######################################################
-    #### ######### ########################################
-    ##### ### ### #########################################
-    ###### # # # ##########################################
-    ####### ### ###########################################
-    #######################################################
-    #######################################################
-    #######################################################
-    /**
-     * WAITING FUNCTION FOR DEV
-     */
     public function getLocalizedRatesPDFLink()
     {
         $shop_iso_country_id = Configuration::get('PS_COUNTRY_DEFAULT');
@@ -1331,7 +1315,6 @@ class Hipay extends PaymentModule
 
         return false;
     }
-
     protected function getTransactionId($details)
     {
         foreach ($details as $key => $value) {
@@ -1373,9 +1356,6 @@ class Hipay extends PaymentModule
 
         return false;
     }
-
-
-
     public function updateHiPayOrderStates()
     {
         $waiting_state_config   = 'HIPAY_OS_WAITING';
@@ -1430,6 +1410,41 @@ class Hipay extends PaymentModule
         $this->saveOrderState($total_state_config, $total_state_color, $total_state_names, $setup);
 
         return true;
+    }
+
+    /**
+     * Preload configuration
+     */
+    protected function preloadConfig($sandbox = false)
+    {
+        $config     = $this->configHipay;
+        $prefix     = (!$sandbox ? 'production':'sandbox');
+        $rating     = (!$sandbox ? 'rating_prod':'rating_sandbox');
+        $login      = $prefix.'_ws_login';
+        $pwd        = $prefix.'_ws_password';
+        $selected   = [];
+
+        // check if the config must be to reload
+        if(!empty($config->$login)
+            && !empty($config->$pwd)
+            && isset($config->$prefix)
+            && count($config->$prefix) > 0
+            && isset($config->selected)
+            && count($config->selected->currencies->$prefix) == 0)
+        {
+            // preload selected informations
+            $config->selected->$rating      = 'ALL';
+
+            foreach ($config->$prefix as $currency)
+            {
+                foreach ($config->$prefix->$currency as $data)
+                {
+                    $config->selected->currencies->$prefix->$currency->accountID = $data->user_account_id;
+                    $config->selected->currencies->$prefix->$currency->websiteID = $data->website_id;
+                }
+            }
+        }
+
     }
 
 }

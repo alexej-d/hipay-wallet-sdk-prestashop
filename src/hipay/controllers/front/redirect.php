@@ -42,6 +42,7 @@ class HipayRedirectModuleFrontController extends ModuleFrontController
                     'cart_id'       => $this->context->cart->id,
                     'currency'      => $this->context->currency->iso_code,
                     'amount'        => $this->context->cart->getOrderTotal(true, Cart::BOTH),
+                    'nbProducts'    => $this->context->cart->nbProducts(),
                 ));
                 // show the iframe page in Prestashop
                 return $this->setTemplate('16_iframe.tpl');

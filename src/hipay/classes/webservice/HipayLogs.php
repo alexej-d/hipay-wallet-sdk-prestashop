@@ -56,6 +56,11 @@ class HipayLogs
     {
         $this->writeLogs(3, $msg);
     }
+    public function refundLogs($msg)
+    {
+        $this->writeLogs(4, $msg);
+    }
+
 
     private function writeLogs($code, $msg)
     {
@@ -74,6 +79,9 @@ class HipayLogs
                     break;
                 case 3:
                     $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-request-new-order.txt','a+');
+                    break;
+                case 4:
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-refund-order.txt','a+');
                     break;
                 default:
                     $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');

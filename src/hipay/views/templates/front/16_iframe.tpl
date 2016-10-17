@@ -35,7 +35,7 @@
   <h3>{l s='HiPay payment.' mod='hipay'}</h3>
 
   <section>
-    <iframe src="{$iframe_url}" width="100%" height="400" ></iframe>
+    <iframe src="{$iframe_url|escape:'html':'UTF-8'}" width="100%" height="550" ></iframe>
   </section>
 
 {/if}
