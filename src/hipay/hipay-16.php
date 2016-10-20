@@ -639,7 +639,14 @@ class Hipay extends PaymentModule
                     $account = $user_account->getAccountInfos($params, false, true);
 
                     if (isset($account->code) && ($account->code == 0)) {
-                        return $this->registerExistingAccount($account, $params, true);
+                        if( $this->registerExistingAccount($account,$params, true) )
+                        {
+                            $this->preloadConfig(true);
+                            return true;
+                        }else{
+                            return false;
+                        }
+
                     } else {
                         $this->_errors[] = $this->l('Authentication failed!');
                     }
@@ -681,7 +688,14 @@ class Hipay extends PaymentModule
                     if (isset($account->code) && ($account->code == 0)) {
                         $this->setConfigHiPay('sandbox_mode', 0);
                         $this->setConfigHiPay('welcome_message_shown',1);
-                        return $this->registerExistingAccount($account,$params);
+                        if( $this->registerExistingAccount($account,$params) )
+                        {
+                            $this->preloadConfig();
+                            return true;
+                        }else{
+                            return false;
+                        }
+
                     } else {
                         $this->_errors[] = $this->l('Authentication failed!');
                         $this->clearAccountData();
@@ -730,7 +744,6 @@ class Hipay extends PaymentModule
                             if (!$sandbox) {
                                 $this->majConfigurationByApi($user_account, true);
                             } else {
-                                $this->preloadConfig($sandbox);
                                 return true;
                             }
                         }
@@ -738,7 +751,7 @@ class Hipay extends PaymentModule
                 } catch (Exception $e) {
                     // LOGS
                     $this->logs->errorLogsHipay($e->getMessage());
-                    $this->_errors[] = $this->l('error ont the webservice, try again later or contact the support HiPay');
+                    $this->_errors[] = $this->l('error on the webservice, try again later or contact the support HiPay');
                 }
             }
             return false;
@@ -771,7 +784,7 @@ class Hipay extends PaymentModule
                     foreach ($sub_account->websites as $website) {
                         $user_mail[$sub_account->currency][$website->website_id] = $website->website_email;
                         $data[$sub_account->currency][$sub_account->user_account_id][] = [
-                            'user_account_id' => $sub_account->user_account_id,
+                            'user_account_id'   => $sub_account->user_account_id,
                             'website_id'        => $website->website_id,
                             'user_mail'         => $website->website_email,
                             'callback_url'      => !empty($sub_account->callback_url) ? $sub_account->callback_url : '',
@@ -1417,12 +1430,14 @@ class Hipay extends PaymentModule
      */
     protected function preloadConfig($sandbox = false)
     {
+        $this->logs->logsHipay('-----> Start preloadConfig');
         $config     = $this->configHipay;
         $prefix     = (!$sandbox ? 'production':'sandbox');
         $rating     = (!$sandbox ? 'rating_prod':'rating_sandbox');
         $login      = $prefix.'_ws_login';
         $pwd        = $prefix.'_ws_password';
-        $selected   = [];
+        // get currencies
+        $psCurrencies = $this->getCurrencies();
 
         // check if the config must be to reload
         if(!empty($config->$login)
@@ -1435,16 +1450,22 @@ class Hipay extends PaymentModule
             // preload selected informations
             $config->selected->$rating      = 'ALL';
 
-            foreach ($config->$prefix as $currency)
+            foreach ($config->$prefix as $currency=>$line)
             {
-                foreach ($config->$prefix->$currency as $data)
+                if (array_key_exists($currency, $psCurrencies))
                 {
-                    $config->selected->currencies->$prefix->$currency->accountID = $data->user_account_id;
-                    $config->selected->currencies->$prefix->$currency->websiteID = $data->website_id;
+                    foreach ($line as $data) {
+                        $config->selected->currencies->$prefix->$currency->accountID = $data[0]['user_account_id'];
+                        $config->selected->currencies->$prefix->$currency->websiteID = $data[0]['website_id'];
+                        break 1;
+                    }
                 }
             }
+            // register in database
+            $this->setConfigHiPay('selected', $config->selected);
         }
 
+        $this->logs->logsHipay('-----> End preloadConfig');
     }
 
 }
