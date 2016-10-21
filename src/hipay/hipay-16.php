@@ -355,6 +355,7 @@ class Hipay extends PaymentModule
                 'logs'                  => 'logs',//$form->getTransactionsForm($user_account),
                 'rating'                => $this->hipay_rating,
                 'selectedCurrencies'    => $selectedCurrencies,
+                'limitedCurrencies'     => $this->currencies_titles,
                 'button_images'         => $images,
                 'url_images'            => $url_img,
                 'ajax_url'              => $this->context->link->getAdminLink('AdminHiPayConfig'),
@@ -927,6 +928,49 @@ class Hipay extends PaymentModule
     }
 
     /**
+     * Preload configuration
+     */
+    protected function preloadConfig($sandbox = false)
+    {
+        $this->logs->logsHipay('-----> Start preloadConfig');
+        $config     = $this->configHipay;
+        $prefix     = (!$sandbox ? 'production':'sandbox');
+        $rating     = (!$sandbox ? 'rating_prod':'rating_sandbox');
+        $login      = $prefix.'_ws_login';
+        $pwd        = $prefix.'_ws_password';
+        // get currencies
+        $psCurrencies = $this->getCurrencies();
+
+        // check if the config must be to reload
+        if(!empty($config->$login)
+            && !empty($config->$pwd)
+            && isset($config->$prefix)
+            && count($config->$prefix) > 0
+            && isset($config->selected)
+            && count($config->selected->currencies->$prefix) == 0)
+        {
+            // preload selected informations
+            $config->selected->$rating      = 'ALL';
+
+            foreach ($config->$prefix as $currency=>$line)
+            {
+                if (array_key_exists($currency, $psCurrencies))
+                {
+                    foreach ($line as $data) {
+                        $config->selected->currencies->$prefix->$currency->accountID = $data[0]['user_account_id'];
+                        $config->selected->currencies->$prefix->$currency->websiteID = $data[0]['website_id'];
+                        break 1;
+                    }
+                }
+            }
+            // register in database
+            $this->setConfigHiPay('selected', $config->selected);
+        }
+
+        $this->logs->logsHipay('-----> End preloadConfig');
+    }
+
+    /**
      * Save forms in tabs settings and payment buttons
      *
      */
@@ -1425,47 +1469,6 @@ class Hipay extends PaymentModule
         return true;
     }
 
-    /**
-     * Preload configuration
-     */
-    protected function preloadConfig($sandbox = false)
-    {
-        $this->logs->logsHipay('-----> Start preloadConfig');
-        $config     = $this->configHipay;
-        $prefix     = (!$sandbox ? 'production':'sandbox');
-        $rating     = (!$sandbox ? 'rating_prod':'rating_sandbox');
-        $login      = $prefix.'_ws_login';
-        $pwd        = $prefix.'_ws_password';
-        // get currencies
-        $psCurrencies = $this->getCurrencies();
 
-        // check if the config must be to reload
-        if(!empty($config->$login)
-            && !empty($config->$pwd)
-            && isset($config->$prefix)
-            && count($config->$prefix) > 0
-            && isset($config->selected)
-            && count($config->selected->currencies->$prefix) == 0)
-        {
-            // preload selected informations
-            $config->selected->$rating      = 'ALL';
-
-            foreach ($config->$prefix as $currency=>$line)
-            {
-                if (array_key_exists($currency, $psCurrencies))
-                {
-                    foreach ($line as $data) {
-                        $config->selected->currencies->$prefix->$currency->accountID = $data[0]['user_account_id'];
-                        $config->selected->currencies->$prefix->$currency->websiteID = $data[0]['website_id'];
-                        break 1;
-                    }
-                }
-            }
-            // register in database
-            $this->setConfigHiPay('selected', $config->selected);
-        }
-
-        $this->logs->logsHipay('-----> End preloadConfig');
-    }
 
 }

@@ -88,11 +88,19 @@
                                     {else}
                                         <td>{$currency}</td>
                                         {if !isset($config_hipay.production.$currency) || $config_hipay.production.$currency|@count == 0}
-                                            <td colspan="2">
-                                            <span class="icon icon-warning-sign" aria-hidden="true">
-                                                <a href="javascript:void(0);" id="production_duplication_{$currency}">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
-                                            </span>
-                                            </td>
+                                            {if !$currency|array_key_exists:$limitedCurrencies }
+                                                <td colspan="2">
+                                                    <span class="icon icon-warning-sign" aria-hidden="true">
+                                                    {l s='This currency is not supported by HiPay' mod='hipay'}
+                                                    </span>
+                                                </td>
+                                            {else}
+                                                <td colspan="2">
+                                                <span class="icon icon-warning-sign" aria-hidden="true">
+                                                    <a href="javascript:void(0);" id="production_duplication_{$currency}">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
+                                                </span>
+                                                </td>
+                                            {/if}
                                         {else}
                                             <td>
                                                 <select id="settings_production_{$currency}_user_account_id" name="settings_production_{$currency}_user_account_id">
@@ -194,11 +202,19 @@
                                         {else}
                                             <td>{$currency}</td>
                                             {if !isset($config_hipay.sandbox.$currency) || $config_hipay.sandbox.$currency|@count == 0}
-                                                <td colspan="2">
+                                                {if !$currency|array_key_exists:$limitedCurrencies }
+                                                    <td colspan="2">
+                                                    <span class="icon icon-warning-sign" aria-hidden="true">
+                                                    {l s='This currency is not supported by HiPay' mod='hipay'}
+                                                    </span>
+                                                    </td>
+                                                {else}
+                                                    <td colspan="2">
                                                 <span class="icon icon-warning-sign" aria-hidden="true">
-                                                    <a href="javascript:void(0);" id="sandbox_duplication_{$currency}">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
+                                                    <a href="javascript:void(0);" id="production_duplication_{$currency}">{l s='Currency not activated. Click here to fix.' mod='hipay'}</a>
                                                 </span>
-                                                </td>
+                                                    </td>
+                                                {/if}
                                             {else}
                                                 <td>
                                                     <select id="settings_sandbox_{$currency}_user_account_id" name="settings_sandbox_{$currency}_user_account_id">
