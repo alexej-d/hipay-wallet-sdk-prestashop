@@ -127,7 +127,8 @@ class Hipay extends PaymentModule
     public function uninstall()
     {
         return $this->uninstallAdminTab() &&
-            parent::uninstall();
+            parent::uninstall() &&
+                $this->clearAccountData();
 
     }
     public function installAdminTab()
@@ -196,7 +197,7 @@ class Hipay extends PaymentModule
      * Store the currencies list the module should work with
      * @return boolean
      */
-    protected function setCurrencies()
+    public function setCurrencies()
     {
         $shops = Shop::getShops(true, null, true);
 
@@ -1468,7 +1469,5 @@ class Hipay extends PaymentModule
 
         return true;
     }
-
-
 
 }

@@ -156,6 +156,9 @@ class AdminHiPayConfigController extends ModuleAdminController
             $website_sub = $user_account->createWebsite($currency,$sub_account->subaccount_id, $sub_account->parent_account_id, $currency_code, $sandbox);
             if($website_sub->code == 0)
             {
+                // reinit Currency permissions for the module HiPay
+                $this->module->setCurrencies();
+
                 $return = [
                     'status' => 1,
                     'message'=> $this->module->l('Subaccount created for the currency '. $currency),
