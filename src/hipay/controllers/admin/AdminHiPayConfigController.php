@@ -173,4 +173,15 @@ class AdminHiPayConfigController extends ModuleAdminController
         }
         die(Tools::jsonEncode($return));
     }
+
+    /**
+     * Reload captcha
+     */
+    public function ajaxProcessReloadCaptcha()
+    {
+        $captcha   = new HipayUserAccount();
+        $return    = $captcha->getCaptcha();
+        // return the new captcha
+        die(Tools::jsonEncode($return));
+    }
 }

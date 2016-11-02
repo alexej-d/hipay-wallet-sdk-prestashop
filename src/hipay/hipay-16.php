@@ -359,7 +359,6 @@ class Hipay extends PaymentModule
                 'limitedCurrencies'     => $this->currencies_titles,
                 'button_images'         => $images,
                 'url_images'            => $url_img,
-                'ajax_url'              => $this->context->link->getAdminLink('AdminHiPayConfig'),
             ));
             // init warning
             $this->getWarningHiPayStatus();
@@ -406,6 +405,7 @@ class Hipay extends PaymentModule
             'url_prod_hipay_direct'     => Hipay::URL_PROD_HIPAY_DIRECT,
             'url_test_hipay_wallet'     => Hipay::URL_TEST_HIPAY_WALLET,
             'url_prod_hipay_wallet'     => Hipay::URL_PROD_HIPAY_WALLET,
+            'ajax_url'                  => $this->context->link->getAdminLink('AdminHiPayConfig'),
         ));
         $this->logs->logsHipay('---- END function getContent');
         $this->logs->logsHipay('##########################');
@@ -489,7 +489,8 @@ class Hipay extends PaymentModule
 
             // reload a new captcha because it's hard to read it
             $this->context->smarty->assign('active_tab', 'register_form');
-            return true;
+            return Tools::redirectAdmin($ur_redirection);
+            //return true;
 
         } elseif (Tools::isSubmit('submitRegister')) {
 

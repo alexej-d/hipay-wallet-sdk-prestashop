@@ -138,7 +138,7 @@ class HipayForm extends HipayFormInputs {
             'class'     => 'fixed-width-xxl captcha-form',
             'hint'      => $this->module->l('You must fill this captcha to validate the form', 'HipayForm'),
             'required'  => true,
-            'suffix'    => (!empty($captcha) ? $captcha->captcha_img : '') . '<button type="submit" class="btn captcha" name="reloadCaptcha" id="reload-captcha">' . $this->module->l('New captcha', 'HipayForm') . '</button>',
+            'suffix'    => '<div id="img-captcha">'.(!empty($captcha) ? $captcha->captcha_img : '') . '</div><button type="button" class="btn captcha" name="reloadCaptcha" id="reload-captcha">' . $this->module->l('New captcha', 'HipayForm') . '</button>',
         ));
         // init terms & conditions
         $label_cgv = '<a href="'.$this->url_cgv.'" target="_blank">'.$this->module->l('I agree with the terms and conditions', 'HipayForm').'</a>';

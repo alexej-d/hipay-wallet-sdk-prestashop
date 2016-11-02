@@ -36,4 +36,25 @@ $(document).ready(function() {
 	$('#datepicker').removeClass('hide');
 	$('#datepicker-cancel').hide();
 
+	$('#reload-captcha').on('click', function() {
+		var form_data = new FormData();
+		form_data.append('controller', 'AdminHiPayConfig');
+		form_data.append('action', 'ReloadCaptcha');
+		form_data.append('ajax', true);
+
+		$.ajax({
+			url: '{$ajax_url}', // point to server-side PHP script
+			dataType: 'json',
+			cache: false,
+			contentType: false,
+			processData: false,
+			data: form_data,
+			type: 'post',
+			success: function (captcha) {
+				if (captcha.code == 0) {
+					$('#img-captcha').html(captcha.captcha_img);
+				}
+			}
+		});
+	});
 });
