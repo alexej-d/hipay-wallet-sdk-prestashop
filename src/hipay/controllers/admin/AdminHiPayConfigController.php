@@ -24,6 +24,8 @@ class AdminHiPayConfigController extends ModuleAdminController
         if (!$this->module->active) {
             $this->sendErrorRequest('Invalid request.');
         }
+
+        require_once _PS_ROOT_DIR_._MODULE_DIR_.$this->module->name.'/classes/webservice/HipayUserAccount.php';
     }
 
     /**
@@ -179,7 +181,7 @@ class AdminHiPayConfigController extends ModuleAdminController
      */
     public function ajaxProcessReloadCaptcha()
     {
-        $captcha   = new HipayUserAccount();
+        $captcha   = new HipayUserAccount($this->module);
         $return    = $captcha->getCaptcha();
         // return the new captcha
         die(Tools::jsonEncode($return));
