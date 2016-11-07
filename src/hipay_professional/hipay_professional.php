@@ -10,7 +10,7 @@
 */
 
 
-use PrestaShop\PrestaShop\Core\Payment\PaymentOption;
+#use PrestaShop\PrestaShop\Core\Payment\PaymentOption;
 
 if (!defined('_PS_VERSION_'))
     exit;
@@ -409,10 +409,10 @@ class Hipay_Professional extends PaymentModule
             'alerts'                    => $this->context->smarty->fetch($alerts),
             'module_dir'                => $this->_path,
             'config_hipay'              => $this->object_to_array($config_hipay),
-            'url_test_hipay_direct'     => Hipay::URL_TEST_HIPAY_DIRECT,
-            'url_prod_hipay_direct'     => Hipay::URL_PROD_HIPAY_DIRECT,
-            'url_test_hipay_wallet'     => Hipay::URL_TEST_HIPAY_WALLET,
-            'url_prod_hipay_wallet'     => Hipay::URL_PROD_HIPAY_WALLET,
+            'url_test_hipay_direct'     => Hipay_Professional::URL_TEST_HIPAY_DIRECT,
+            'url_prod_hipay_direct'     => Hipay_Professional::URL_PROD_HIPAY_DIRECT,
+            'url_test_hipay_wallet'     => Hipay_Professional::URL_TEST_HIPAY_WALLET,
+            'url_prod_hipay_wallet'     => Hipay_Professional::URL_PROD_HIPAY_WALLET,
             'ajax_url'                  => $this->context->link->getAdminLink('AdminHiPayConfig'),
         ));
         $this->logs->logsHipay('---- END function getContent');

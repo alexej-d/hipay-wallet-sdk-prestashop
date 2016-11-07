@@ -48,7 +48,7 @@
         </form>
     </div>
 {else}
-    {$register_form|escape:'htmlall':'UTF-8'}
+    {$register_form}
     <script type="text/javascript">
         $( document ).ready(function() {
             $('#reload-captcha').on('click', function() {

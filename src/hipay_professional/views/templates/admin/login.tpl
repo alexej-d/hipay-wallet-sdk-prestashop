@@ -9,4 +9,4 @@
 * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
 *
 *}
-{$login_form|escape:'htmlall':'UTF-8'}
+{$login_form}

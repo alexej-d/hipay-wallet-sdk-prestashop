@@ -66,22 +66,22 @@ class HipayLogs
             switch ($code)
             {
                 case 0:
-                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-error-logs.txt','a+');
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay_professional/logs/'.date('Y-m-d').'-error-logs.txt','a+');
                     break;
                 case 1:
-                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay_professional/logs/'.date('Y-m-d').'-logs.txt','a+');
                     break;
                 case 2:
-                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-callback.txt','a+');
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay_professional/logs/'.date('Y-m-d').'-callback.txt','a+');
                     break;
                 case 3:
-                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-request-new-order.txt','a+');
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay_professional/logs/'.date('Y-m-d').'-request-new-order.txt','a+');
                     break;
                 case 4:
-                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-refund-order.txt','a+');
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay_professional/logs/'.date('Y-m-d').'-refund-order.txt','a+');
                     break;
                 default:
-                    $fp = fopen(_PS_MODULE_DIR_.'/hipay/logs/'.date('Y-m-d').'-logs.txt','a+');
+                    $fp = fopen(_PS_MODULE_DIR_.'/hipay_professional/logs/'.date('Y-m-d').'-logs.txt','a+');
                     break;
             }
             fseek($fp,SEEK_END);
