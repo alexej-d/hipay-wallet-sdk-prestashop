@@ -1,8 +1,8 @@
-# HiPay Fullservice module for PrestaShop 1.4.x - 1.5.x - 1.6.x
+# HiPay Fullservice module for PrestaShop 1.6.x - 1.7.x
 
 [![Build Status](https://circleci.com/gh/hipay/hipay-fullservice-sdk-prestashop/tree/master.svg?style=shield)](https://circleci.com/gh/hipay/hipay-fullservice-sdk-prestashop/tree/master) [![GitHub license](https://img.shields.io/badge/license-Apache%202-blue.svg)](https://raw.githubusercontent.com/hipay/hipay-fullservice-sdk-prestashop/master/LICENSE.md)
 
-The **HiPay Fullservice module for PrestaShop 1.4.x - 1.5.x - 1.6.x** is a PHP module which allows you to accept payments in your PrestaShop online store, offering innovative features to reduce shopping cart abandonment rates, optimize success rates and enhance the purchasing process on merchants’ sites to significantly increase business volumes without additional investments in the solution CMS e-commerce PrestaShop.
+The **HiPay Fullservice module for PrestaShop 1.6.x - 1.7.x** is a PHP module which allows you to accept payments in your PrestaShop online store, offering innovative features to reduce shopping cart abandonment rates, optimize success rates and enhance the purchasing process on merchants’ sites to significantly increase business volumes without additional investments in the solution CMS e-commerce PrestaShop.
 
 ## Getting started
 
@@ -10,7 +10,7 @@ Read the **[project documentation][doc-home]** for comprehensive information abo
 
 ## Latest package for installation/upgrade in Prestashop Module Management 
 
-Download the package ZIP available in the folder "_package-ready-for-prestashop_" : [Download the package](package-ready-for-prestashop/hipay_tpp_1-3-x.zip)
+Download the package ZIP available in the folder "_package-ready-for-prestashop_" : [Download the package](package-ready-for-prestashop/hipay_professionnal_1-0-x.zip)
 
 ## Resources
 - [Full project documentation][doc-home] — To have a comprehensive understanding of the workflow and get the installation procedure
@@ -21,22 +21,18 @@ Download the package ZIP available in the folder "_package-ready-for-prestashop_
 
 ## Features
 
-- Compatibility Prestashop 1.4.x - 1.5.x - 1.6.x
+- Compatibility Prestashop 1.6.x - 1.7.x
 - Enabling the 3D secure
-- Oneclick configurable by custom rules
-- Managing multiple cards per customer for payment Oneclick
-- Iframe integration, hosted page and API custom cards
-- Mail management for transactions awaiting validation of fraud (challenge)
+- Iframe integration, hosted page
 - Manual and automatic capture
 - Capture and partial refund
-- Payment in x times without fees (dev in progress)
-- Subscription management (dev in progress)
+- Several payment methods
 
 ## License
 
-The **HiPay Fullservice module for PrestaShop 1.4.x - 1.5.x - 1.6.x** is available under the **Apache 2.0 License**. Check out the [license file][project-license] for more information.
+The **HiPay Fullservice module for PrestaShop 1.6.x - 1.7.x** is available under the **Apache 2.0 License**. Check out the [license file][project-license] for more information.
 
-[doc-home]: https://github.com/hipay/hipay-fullservice-sdk-prestashop/wiki
+[doc-home]: https://developer.hipay.com/doc/hipay-direct-sdk-prestashop/
 
 [hipay-help]: http://help.hipay.com
 

@@ -4,9 +4,9 @@
 
 /tmp/docker_run.sh
 
-#install module HiPay
+#install module HiPay Professionnal
 
-echo "\n* Starting install module HiPay ...";
+echo "\n* Starting install module HiPay Professionnal ...";
 
 php /var/www/html/hipay_install.php
 

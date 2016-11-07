@@ -1,8 +1,8 @@
 prestashop:
-  container_name: jira-pro-1618.hipay-pos-platform.com
+  container_name: jira-pro-1700.hipay-pos-platform.com
   build: .
   ports:
-    - "8099:80"
+    - "8100:80"
   links:
     - smtp
   env_file:
@@ -11,4 +11,4 @@ smtp:
   image: schickling/mailcatcher
   container_name: smtp-hipay-ps-refonte
   ports:
-    - "1099:1080"
+    - "1100:1080"

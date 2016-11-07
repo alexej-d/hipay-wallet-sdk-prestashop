@@ -1,6 +1,7 @@
-FROM prestashop/prestashop:1.6.1.7
+FROM prestashop/prestashop:1.6.1.8
+#FROM prestashop/prestashop:1.7.0.0-RC.3
 
-MAINTAINER Johan PROTIN <jprotin@hipay.com>
+MAINTAINER support.wallet <support.wallet@hipay.com>
 
 RUN apt-get update \
         && apt-get install -y ssmtp \

@@ -2,7 +2,7 @@
 include(dirname(__FILE__).'/config/config.inc.php');
 
 // nom du module à charger
-$moduleName = 'hipay';
+$moduleName = 'hipay_professionnal';
 // si module déjà installé
 if(!Module::isInstalled($moduleName)){
 	// chargement de l'objet module
