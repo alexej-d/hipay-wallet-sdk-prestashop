@@ -43,7 +43,7 @@ class HipayRedirectModuleFrontController extends ModuleFrontController
                     'nbProducts'    => $this->context->cart->nbProducts(),
                 ));
                 // show the iframe page in Prestashop
-                return $this->setTemplate('16_iframe.tpl');
+                return (_PS_VERSION_ >= '1.7') ? $this->setTemplate('17_iframe.tpl') : $this->setTemplate('16_iframe.tpl');
             }
         }
     }
