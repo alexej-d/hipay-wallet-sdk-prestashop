@@ -333,8 +333,6 @@ class Hipay_Professional extends PaymentModule
         $newOption = new PaymentOption();
         $newOption->setCallToActionText(($lang == 'fr' ? $this->configHipay->button_text_fr : $this->configHipay->button_text_en))
             ->setAction($this->context->link->getModuleLink($this->name, 'redirect', array(), true))
-            ->setMethod('POST')
-            ->setAdditionalInformation($this->fetch('module:'.$this->name.'/views/templates/front/17_payment_infos.tpl'))
             ->setLogo(Media::getMediaPath($this->getPaymentButton()));
 
         return $newOption;
