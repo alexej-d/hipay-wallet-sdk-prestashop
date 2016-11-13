@@ -88,7 +88,7 @@ class HipayPayment extends HipayWS
             'emailCallback'     => $wesbite_email,
             'executionDate'     => date('Y-m-d\TH:i:s'),
             'locale'            => $locale->getCurrentLocaleCode(),
-            'manualCapture'     => (int)false,
+            'manualCapture'     => (!$configHipay->manual_capture ? 1 : 0),
             'rating'            => $rating,
             'wsSubAccountId'    => $wesbite_account_id,
             'method'            => (!$configHipay->payment_form_type ? 'iframe':''),
