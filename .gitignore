@@ -6,3 +6,4 @@
 _$*
 *.lock
 .idea
+.vscode

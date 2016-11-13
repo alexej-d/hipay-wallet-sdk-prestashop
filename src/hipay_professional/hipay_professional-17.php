@@ -284,10 +284,12 @@ class Hipay_Professional extends PaymentModule
             'id_order' => $order->id,
             'reference' => $order->reference,
             'params' => $params,
-            'total' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
+            'total_to_pay' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
+            'shop_name' => $this->context->shop->name,
+            'status' => 'ok',
         ));
 
-        return $this->display(dirname(__FILE__), 'views/templates/hook/confirmation.tpl');
+        return $this->fetch('module:hipay_professional/views/templates/hook/confirmation.tpl');
     }
     public function hookPaymentTop()
     {
@@ -307,8 +309,6 @@ class Hipay_Professional extends PaymentModule
         }
         $payment_options = [
             $this->getExternalPaymentOption(),
-            $this->getEmbeddedPaymentOption(),
-            $this->getIframePaymentOption(),
         ];
         return $payment_options;
     }
@@ -328,54 +328,16 @@ class Hipay_Professional extends PaymentModule
     }
     public function getExternalPaymentOption()
     {
-        $externalOption = new PaymentOption();
-        $externalOption->setCallToActionText($this->l('Pay external'))
+        $lang = Tools::strtolower($this->context->language->iso_code);
+
+        $newOption = new PaymentOption();
+        $newOption->setCallToActionText(($lang == 'fr' ? $this->configHipay->button_text_fr : $this->configHipay->button_text_en))
             ->setAction($this->context->link->getModuleLink($this->name, 'redirect', array(), true))
             ->setMethod('POST')
-            ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
+            ->setAdditionalInformation($this->fetch('module:'.$this->name.'/views/templates/front/17_payment_infos.tpl'))
             ->setLogo(Media::getMediaPath($this->getPaymentButton()));
 
-        return $externalOption;
-    }
-    public function getEmbeddedPaymentOption()
-    {
-        $embeddedOption = new PaymentOption();
-        $embeddedOption->setCallToActionText($this->l('Pay embedded'))
-            ->setForm($this->generateForm())
-            ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
-            ->setLogo(Media::getMediaPath($this->getPaymentButton()));
-
-        return $embeddedOption;
-    }
-    public function getIframePaymentOption()
-    {
-        $iframeOption = new PaymentOption();
-        $iframeOption->setCallToActionText($this->l('Pay iframe'))
-            ->setAction($this->context->link->getModuleLink($this->name, 'redirect', array(), true))
-            ->setAdditionalInformation($this->context->smarty->fetch('module:hipay/views/templates/front/17_payment_infos.tpl'))
-            ->setLogo(Media::getMediaPath($this->getPaymentButton()));
-
-        return $iframeOption;
-    }
-    protected function generateForm()
-    {
-        $months = [];
-        for ($i = 1; $i <= 12; $i++) {
-            $months[] = sprintf("%02d", $i);
-        }
-
-        $years = [];
-        for ($i = 0; $i <= 10; $i++) {
-            $years[] = date('Y', strtotime('+'.$i.' years'));
-        }
-
-        $this->context->smarty->assign([
-            'action' => $this->context->link->getModuleLink($this->name, 'validation', array(), true),
-            'months' => $months,
-            'years' => $years,
-        ]);
-
-        return $this->context->smarty->fetch('module:views/templates/front/17_payment_form.tpl');
+        return $newOption;
     }
 
     /**
@@ -475,7 +437,7 @@ class Hipay_Professional extends PaymentModule
             $this->context->smarty->assign('active_tab', 'login_form');
             $this->create_account = true;
             $this->clearAccountData();
-            Tools::redirectAdmin($ur_redirection);
+            //Tools::redirectAdmin($ur_redirection);
 
         } elseif (Tools::isSubmit('submitLogin')) {
 
@@ -484,7 +446,7 @@ class Hipay_Professional extends PaymentModule
             // execute login
             $this->context->smarty->assign('active_tab', 'login_form');
             if($this->login($user_account)){
-                Tools::redirectAdmin($ur_redirection);
+                //Tools::redirectAdmin($ur_redirection);
             }else{
                 return false;
             }

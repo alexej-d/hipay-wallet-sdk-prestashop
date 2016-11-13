@@ -10,7 +10,7 @@
 *
 *}
 <div class="panel">
-    <form method="post" action="{$smarty.server.REQUEST_URI|escape:'htmlall':'UTF-8'}}" id="payment_button_form" enctype="multipart/form-data">
+    <form method="post" action="{$smarty.server.REQUEST_URI|escape:'htmlall':'UTF-8'}" id="payment_button_form" enctype="multipart/form-data">
         <div class="row">
             <div class="col-md-12 col-xs-12">
                 <!-- PAYMENT WORKFLOW INTEGRATION START -->

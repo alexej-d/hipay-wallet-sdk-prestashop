@@ -36,9 +36,9 @@ class HipayForm extends HipayFormInputs {
 
         $this->helper->currentIndex = $this->context->link->getAdminLink('AdminModules', false);
         $this->helper->currentIndex .= '&'.http_build_query(array(
-            'configure' => 'hipay',
+            'configure' => $this->module->name,
             'tab_module' => 'payments_gateways',
-            'module_name' => 'hipay',
+            'module_name' => $this->module->name,
         ));
 
         $this->helper->module = $this;

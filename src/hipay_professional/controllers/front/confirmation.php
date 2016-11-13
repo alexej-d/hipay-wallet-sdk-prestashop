@@ -9,7 +9,7 @@
  * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
  */
 
-class HipayConfirmationModuleFrontController extends ModuleFrontController
+class Hipay_ProfessionalConfirmationModuleFrontController extends ModuleFrontController
 {
     public function postProcess()
     {
@@ -54,7 +54,7 @@ class HipayConfirmationModuleFrontController extends ModuleFrontController
     {
         $this->errors[] = $this->module->l('An error occurred. Please contact the merchant for more details.', 'HipayConfig');
 
-        return $this->setTemplate('error.tpl');
+        return $this->setTemplate((_PS_VERSION_ >= '1.7' ? 'module:' . $this->module->name . '/views/templates/front/':'') . 'error.tpl');
     }
 
     protected function waitForConfirmation($cart_id, $secure_key)
@@ -65,9 +65,9 @@ class HipayConfirmationModuleFrontController extends ModuleFrontController
 
         $this->context->smarty->assign([
             'img_dir' 	=> _MODULE_DIR_.'/'.$this->module->name.'/views/img',
-            'ajax_url'	=> $this->context->link->getModuleLink('hipay', 'check', $params, true),
+            'ajax_url'	=> $this->context->link->getModuleLink($this->module->name, 'check', $params, true),
         ]);
 
-        return $this->setTemplate('waiting_validation.tpl');
+        return $this->setTemplate((_PS_VERSION_ >= '1.7' ? 'module:' . $this->module->name . '/views/templates/front/17':'16') . '_waiting_validation.tpl');
     }
 }

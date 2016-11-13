@@ -9,7 +9,7 @@
  * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
  */
 
-class HipayRedirectModuleFrontController extends ModuleFrontController
+class Hipay_ProfessionalRedirectModuleFrontController extends ModuleFrontController
 {
     public function postProcess()
     {
@@ -43,7 +43,8 @@ class HipayRedirectModuleFrontController extends ModuleFrontController
                     'nbProducts'    => $this->context->cart->nbProducts(),
                 ));
                 // show the iframe page in Prestashop
-                return (_PS_VERSION_ >= '1.7') ? $this->setTemplate('17_iframe.tpl') : $this->setTemplate('16_iframe.tpl');
+                $path = (_PS_VERSION_ >= '1.7' ? 'module:' . $this->module->name . '/views/templates/front/17':'16') . '_iframe.tpl';
+                return $this->setTemplate($path);
             }
         }
     }
@@ -60,6 +61,6 @@ class HipayRedirectModuleFrontController extends ModuleFrontController
             $this->errors[] = $description;
         }
 
-        return $this->setTemplate('error.tpl');
+        return $this->setTemplate((_PS_VERSION_ >= '1.7' ? 'module:' . $this->module->name . '/views/templates/front/':'') . 'error.tpl');
     }
 }

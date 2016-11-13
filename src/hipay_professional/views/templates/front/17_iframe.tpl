@@ -13,6 +13,6 @@
 
 {block name="content"}
   <section>
-    <iframe src="{$src|escape:'htmlall':'UTF-8'}"  width="100%" height="550"  ></iframe>
+    <iframe src="{$iframe_url|escape:'htmlall':'UTF-8'}"  width="100%" height="550"  ></iframe>
   </section>
 {/block}

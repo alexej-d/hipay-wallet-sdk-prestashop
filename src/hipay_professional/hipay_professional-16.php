@@ -209,7 +209,8 @@ class Hipay_Professional extends PaymentModule
 
         return true;
     }
-    protected function getCurrencies(){
+    protected function getCurrencies()
+    {
         // get currencies
         $currencies = Currency::getCurrenciesByIdShop((int)$this->context->shop->id);
         $selectedCurrencies = [];

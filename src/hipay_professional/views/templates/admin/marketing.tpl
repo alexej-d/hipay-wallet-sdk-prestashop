@@ -25,11 +25,11 @@
         <div class="row">
             <div class="col-md-12 col-xs-12">
                 <p>
-                    <span id="welcome-message">{l s='Welcome to PrestaShop Payments by HiPay!' mod='hipay_professional'}</span>
+                    <span id="welcome-message">{l s='Welcome to HiPay Professional !' mod='hipay_professional'}</span>
                     <br />
                     {l s='Your store can now accept payments in 8 currencies.' mod='hipay_professional'}<br />
                     {l s='You should have received by email your credentials to connect to your HiPay account. You also have received some test credentials to run payment tests before going live.' mod='hipay_professional'}<br />
-                    {l s='If you have any question, please contact us at prestashop@hipay.com.' mod='hipay_professional'}<br />
+                    {l s='If you have any question, please contact us at support.direct@hipay.com.' mod='hipay_professional'}<br />
                     <br />
                     {l s='Happy selling!' mod='hipay_professional'}
                 </p>
@@ -81,8 +81,8 @@
                             <h4>{l s='3 simple steps:' mod='hipay_professional'}</h4>
                             <ol>
                                 <li>{l s='Download the HiPay free module' mod='hipay_professional'}</li>
-                                <li>{l s='Finalize your PrestaShop Payments by HiPay registration before you reach €2,500 on your account.' mod='hipay_professional'}</li>
-                                <li>{l s='Easily collect and transfer your money from your PrestaShop Payments by HiPay account to your own bank account.' mod='hipay_professional'}</li>
+                                <li>{l s='Finalize your HiPay Professional registration before you reach €2,500 on your account.' mod='hipay_professional'}</li>
+                                <li>{l s='Easily collect and transfer your money from your HiPay Professional account to your own bank account.' mod='hipay_professional'}</li>
                             </ol>
                         </div>
                     </div>

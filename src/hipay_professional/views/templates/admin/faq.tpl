@@ -11,36 +11,36 @@
 *}
 <div class="panel">
     <dl id="faq_q_a">
-        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq1" aria-expanded="true" aria-controls="faq1"><i class="icon icon-question-circle"></i> {l s='In which countries can I use PrestaShop Payments by HiPay?' mod='hipay_professional'}</dt>
+        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq1" aria-expanded="true" aria-controls="faq1"><i class="icon icon-question-circle"></i> {l s='In which countries can I use HiPay Professional?' mod='hipay_professional'}</dt>
         <dd id="faq1" class="panel-collapse collapse">
             <p>
-                {l s='PrestaShop Payments by HiPay is available to all your customers, wherever they are.' mod='hipay_professional'}<br />
+                {l s='HiPay Professional is available to all your customers, wherever they are.' mod='hipay_professional'}<br />
                 {l s='Depending on a customer\'s country, some local and leading payment solutions will be available as well.' mod='hipay_professional'}<br />
             </p>
         </dd>
 
-        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq2" aria-expanded="true" aria-controls="faq2"><i class="icon icon-question-circle"></i> {l s='Which payment solutions are available with PrestaShop Payments by HiPay?' mod='hipay_professional'}</dt>
+        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq2" aria-expanded="true" aria-controls="faq2"><i class="icon icon-question-circle"></i> {l s='Which payment solutions are available with HiPay Professional?' mod='hipay_professional'}</dt>
         <dd id="faq2" class="panel-collapse collapse">
             <p>
-                {l s='The payment solutions available on your shop with PrestaShop Payments by HiPay depend on your customer’s delivery address: each country has a different set of payment solutions' mod='hipay_professional'}<br />
+                {l s='The payment solutions available on your shop with HiPay Professional depend on your customer’s delivery address: each country has a different set of payment solutions' mod='hipay_professional'}<br />
                 {l s='If you wish to remove some payment solutions from your offer, please contact [1]prestashop@hipay.com[/1]' tags=['<a href="mailto:prestashop@hipay.com">'] mod='hipay_professional'}
             </p>
         </dd>
 
-        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq3" aria-expanded="true" aria-controls="faq3"><i class="icon icon-question-circle"></i> {l s='Which currencies can I accept with PrestaShop Payments by HiPay?' mod='hipay_professional'}</dt>
+        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq3" aria-expanded="true" aria-controls="faq3"><i class="icon icon-question-circle"></i> {l s='Which currencies can I accept with HiPay Professional?' mod='hipay_professional'}</dt>
         <dd id="faq3" class="panel-collapse collapse">
             <p>
-                {l s='PrestaShop Payments by HiPay works with the following currencies:' mod='hipay_professional'}<br />
+                {l s='HiPay Professional works with the following currencies:' mod='hipay_professional'}<br />
                 {l s='Australian Dollar, Canadian Dollar, Swiss Franc, Euro, British Pound, Swedish Krona, US Dollar, Polish Sloty.' mod='hipay_professional'}
             </p>
         </dd>
 
-        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq4" aria-expanded="true" aria-controls="faq4"><i class="icon icon-question-circle"></i> {l s='I want to have PrestaShop Payments by HiPay currencies available in my shop, how can I do?' mod='hipay_professional'}</dt>
+        <dt data-toggle="collapse" data-parent="#faq_q_a" href="#faq4" aria-expanded="true" aria-controls="faq4"><i class="icon icon-question-circle"></i> {l s='I want to have HiPay Professional currencies available in my shop, how can I do?' mod='hipay_professional'}</dt>
         <dd id="faq4" class="panel-collapse collapse">
             {l s='If you want to offer new currencies on your shop, please follow these steps:' mod='hipay_professional'}<br />
             <ol>
                 <li>{l s='In Localization > Currencies, add the new currency you want to activate' mod='hipay_professional'}</li>
-                <li>{l s='In Modules > Payment, activate the new currency for PrestaShop Payments by HiPay. If you don’t want to accept this currency through other payment solutions, please make sure it is activated only for PrestaShop Payments by HiPay.' mod='hipay_professional'}</li>
+                <li>{l s='In Modules > Payment, activate the new currency for HiPay Professional. If you don’t want to accept this currency through other payment solutions, please make sure it is activated only for HiPay Professional.' mod='hipay_professional'}</li>
             </ol>
         </dd>
 

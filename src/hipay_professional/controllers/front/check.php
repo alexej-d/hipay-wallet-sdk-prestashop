@@ -9,7 +9,7 @@
  * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
  */
 
-class HipayCheckModuleFrontController extends ModuleFrontController
+class Hipay_ProfessionnalCheckModuleFrontController extends ModuleFrontController
 {
     public function postProcess()
     {

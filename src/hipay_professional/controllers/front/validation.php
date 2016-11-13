@@ -9,7 +9,7 @@
  * @license   https://github.com/hipay/hipay-wallet-sdk-prestashop/blob/master/LICENSE.md
  */
 
-class HipayValidationModuleFrontController extends ModuleFrontController
+class Hipay_ProfessionalValidationModuleFrontController extends ModuleFrontController
 {
     public $configHipay;
     public $logs;
@@ -96,7 +96,7 @@ class HipayValidationModuleFrontController extends ModuleFrontController
 
         $this->errors[] = $this->module->l($message);
 
-        return $this->setTemplate('error.tpl');
+        return $this->setTemplate((_PS_VERSION_ >= '1.7' ? 'module:' . $this->module->name . '/views/templates/front/':'') . 'error.tpl');
     }
 
     protected function registerOrder($order, $cart_id, $amount, $secure_key)
@@ -290,7 +290,31 @@ class HipayValidationModuleFrontController extends ModuleFrontController
             ));
             // ----
 
-            if( $this->module->validateOrder((int)$cart_id,(int)$id_order_state,(float)$amount, $this->module->displayName, $message, $extra_vars, (int)$currency->id, false, $secure_key)){
+            // init context
+			$cart = new Cart((int) $cart_id);      
+            Context::getContext()->cart = $cart; 
+			$address = new Address((int) Context::getContext()->cart->id_address_invoice);
+			Context::getContext()->country = new Country((int) $address->id_country);
+			Context::getContext()->customer = new Customer((int) Context::getContext()->cart->id_customer);
+			Context::getContext()->language = new Language((int) Context::getContext()->cart->id_lang);
+			Context::getContext()->currency = new Currency((int) Context::getContext()->cart->id_currency);
+			$customer 	= new Customer((int) Context::getContext()->cart->id_customer);
+			$shop_id = $cart->id_shop;
+			$shop = new Shop($shop_id);
+			Shop::setContext(Shop::CONTEXT_SHOP,$cart->id_shop);
+
+            if( $this->module->validateOrder(
+                    Context::getContext()->cart->id, 
+					(int)$id_order_state, 
+					(float)$amount, 
+					$this->module->displayName, 
+					$message, 
+					$extra_vars, 
+					Context::getContext()->cart->id_currency, 
+					false, 
+					$customer->secure_key,
+			  		$shop
+                )){
                 $this->logs->callbackLogs('Order created');
                 return true;
             }else{
