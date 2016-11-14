@@ -311,10 +311,11 @@ class Hipay_Professional extends PaymentModule
         }
 
         $this->smarty->assign(array(
-            'id_order' => $order->id,
-            'reference' => $order->reference,
-            'params' => $params,
-            'total' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
+            'id_order'      => $order->id,
+            'reference'     => $order->reference,
+            'params'        => $params,
+            'total_to_pay'  => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
+            'shop_name'     => $this->context->shop->name,
         ));
 
         return $this->display(dirname(__FILE__), 'views/templates/hook/confirmation.tpl');

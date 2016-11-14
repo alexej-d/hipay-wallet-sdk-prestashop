@@ -274,22 +274,21 @@ class Hipay_Professional extends PaymentModule
             return;
         }
 
-        $order = $params['objOrder'];
+        $order = $params['order'];
 
         if ($order->getCurrentOrderState()->id != Configuration::get('PS_OS_ERROR')) {
             $this->smarty->assign('status', 'ok');
         }
 
         $this->smarty->assign(array(
-            'id_order' => $order->id,
-            'reference' => $order->reference,
-            'params' => $params,
-            'total_to_pay' => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
-            'shop_name' => $this->context->shop->name,
-            'status' => 'ok',
+            'id_order'      => $order->id,
+            'reference'     => $order->reference,
+            'params'        => $params,
+            'total_to_pay'  => Tools::displayPrice($order->total_paid, NULL, false),
+            'shop_name'     => $this->context->shop->name,
         ));
 
-        return $this->fetch('module:hipay_professional/views/templates/hook/confirmation.tpl');
+        return $this->fetch('module:'.$this->name.'/views/templates/hook/confirmation.tpl');
     }
     public function hookPaymentTop()
     {

@@ -290,38 +290,31 @@ class Hipay_ProfessionalValidationModuleFrontController extends ModuleFrontContr
             ));
             // ----
 
-            // init context
-			$cart = new Cart((int) $cart_id);      
-            Context::getContext()->cart = $cart; 
-			$address = new Address((int) Context::getContext()->cart->id_address_invoice);
-			Context::getContext()->country = new Country((int) $address->id_country);
-			Context::getContext()->customer = new Customer((int) Context::getContext()->cart->id_customer);
-			Context::getContext()->language = new Language((int) Context::getContext()->cart->id_lang);
-			Context::getContext()->currency = new Currency((int) Context::getContext()->cart->id_currency);
-			$customer 	= new Customer((int) Context::getContext()->cart->id_customer);
-			$shop_id = $cart->id_shop;
+            // force cart's shop for treatment
+			$shop_id = $this->context->cart->id_shop;
 			$shop = new Shop($shop_id);
-			Shop::setContext(Shop::CONTEXT_SHOP,$cart->id_shop);
+			Shop::setContext(Shop::CONTEXT_SHOP,$shop_id);
+            $this->logs->callbackLogs('ID Shop = ' . $shop_id);
 
-            if( $this->module->validateOrder(
-                    Context::getContext()->cart->id, 
+            try{
+                $this->module->validateOrder(
+                    $this->context->cart->id, 
 					(int)$id_order_state, 
 					(float)$amount, 
 					$this->module->displayName, 
 					$message, 
 					$extra_vars, 
-					Context::getContext()->cart->id_currency, 
+					$this->context->cart->id_currency, 
 					false, 
-					$customer->secure_key,
+					$secure_key,
 			  		$shop
-                )){
+                );
                 $this->logs->callbackLogs('Order created');
-                return true;
-            }else{
+            }catch(Exception $e){
                 $this->logs->callbackLogs('Order is not created');
                 return false;
             }
-
+            return true;
         }
     }
 }
