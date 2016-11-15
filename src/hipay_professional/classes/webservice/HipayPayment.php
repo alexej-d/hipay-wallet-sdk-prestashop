@@ -17,8 +17,8 @@ require_once(dirname(__FILE__).'/HipayLocale.php');
 
 class HipayPayment extends HipayWS
 {
-    protected $categories_domain = 'https://qa-payment.hipay.com/';
-    protected $categories_test_domain = 'https://qa-payment.hipay.com/';
+    protected $categories_domain = 'https://payment.hipay.com/';
+    protected $categories_test_domain = 'https://test-payment.hipay.com/';
     protected $categories_url = 'order/list-categories/id/';
     protected $logs;
 

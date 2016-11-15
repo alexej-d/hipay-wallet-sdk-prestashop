@@ -17,8 +17,8 @@ abstract class HipayREST
     protected $context = false;
     protected $module = false;
 
-    protected $rest_url = 'https://qa-merchant.hipaywallet.com/api';
-    protected $rest_test_url = 'https://qa-merchant.hipaywallet.com/api';
+    protected $rest_url = 'https://merchant.hipaywallet.com/api';
+    protected $rest_test_url = 'https://test-merchant.hipaywallet.com/api';
 
     public $configHipay;
     protected $RestLogin =false;

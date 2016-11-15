@@ -19,8 +19,8 @@ abstract class HipayWS
     protected $client_url = false;
     protected $module = false;
 
-    protected $ws_url = 'https://qa-ws.hipay.com';
-    protected $ws_test_url = 'https://qa-ws.hipay.com';
+    protected $ws_url = 'https://ws.hipay.com';
+    protected $ws_test_url = 'https://test-ws.hipay.com';
 
     public $configHipay;
 
