@@ -12,7 +12,7 @@
 
 use PrestaShop\PrestaShop\Core\Payment\PaymentOption;
 
-class Hipay_Professional17 extends PaymentModule
+class Hipay_Professional17 extends Hipay_Professional
 {
     /*
     * VERSION PS 1.7
@@ -55,5 +55,25 @@ class Hipay_Professional17 extends PaymentModule
             ->setLogo(Media::getMediaPath($this->getPaymentButton()));
 
         return $newOption;
+    }
+
+    public function Hipay_PaymentReturn17($params)
+    {
+        // Payement return for PS 1.7
+        if ($this->active == false) {
+            return;
+        }
+        $order = $params['order'];
+        if ($order->getCurrentOrderState()->id != Configuration::get('PS_OS_ERROR')) {
+            $this->smarty->assign('status', 'ok');
+        }
+        $this->smarty->assign(array(
+            'id_order'      => $order->id,
+            'reference'     => $order->reference,
+            'params'        => $params,
+            'total_to_pay'  => Tools::displayPrice($order->total_paid, NULL, false),
+            'shop_name'     => $this->context->shop->name,
+        ));
+        return $this->fetch('module:'.$this->name.'/views/templates/hook/confirmation.tpl');
     }
 }

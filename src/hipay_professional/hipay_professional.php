@@ -12,21 +12,6 @@
 if (!defined('_PS_VERSION_'))
     exit;
 
-if (_PS_VERSION_ >= '1.7') {
-    // version 1.7
-    require_once(_PS_ROOT_DIR_.'/modules/hipay_professional/hipay_professional-17.php');
-} elseif (_PS_VERSION_ < '1.7' && _PS_VERSION_ >= '1.6') {
-    // Version 1.6
-    require_once(_PS_ROOT_DIR_.'/modules/hipay_professional/hipay_professional-16.php');
-} else {
-    // Version < 1.6
-    Tools::displayError('The module HiPay Professional is not compatible with your PrestaShop');
-}
-require_once(dirname(__FILE__).'/classes/forms/HipayForm.php');
-require_once(dirname(__FILE__).'/classes/webservice/HipayUserAccount.php');
-require_once(dirname(__FILE__).'/classes/webservice/HipayLogs.php');
-require_once(dirname(__FILE__).'/classes/webservice/HipayREST.php');
-
 class Hipay_Professional extends PaymentModule
 {
     protected $config_form = false;
@@ -316,6 +301,20 @@ class Hipay_Professional extends PaymentModule
     }
     public function hookPaymentReturn($params)
     {
+        if (_PS_VERSION_ >= '1.7') {
+
+            $hipay17 = new Hipay_Professional17();
+            $hipay17->Hipay_PaymentReturn17($params);
+
+        } elseif (_PS_VERSION_ < '1.7' && _PS_VERSION_ >= '1.6') {
+            
+            $this->Hipay_PaymentReturn($params);
+        
+        }
+    }
+    private function Hipay_PaymentReturn($params)
+    {
+        // Payment Return for PS1.6
         if ($this->active == false) {
             return;
         }
@@ -333,7 +332,6 @@ class Hipay_Professional extends PaymentModule
             'total_to_pay'  => Tools::displayPrice($params['total_to_pay'], $params['currencyObj'], false),
             'shop_name'     => $this->context->shop->name,
         ));
-
         return $this->display(dirname(__FILE__), 'views/templates/hook/confirmation.tpl');
     }
     public function hookPaymentTop()
@@ -346,7 +344,7 @@ class Hipay_Professional extends PaymentModule
     */
     public function hookPaymentOptions($params)
     {
-        $hipay17 = new Hipay_professional17();
+        $hipay17 = new Hipay_Professional17();
         return $hipay17->Hipay_PaymentOptions($params);
     }
 
@@ -1484,3 +1482,16 @@ class Hipay_Professional extends PaymentModule
         return true;
     }
 }
+
+if (_PS_VERSION_ >= '1.7') {
+    // version 1.7
+    require_once(_PS_ROOT_DIR_.'/modules/hipay_professional/hipay_professional-17.php');
+} elseif (_PS_VERSION_ < '1.6') {
+    // Version < 1.6
+    Tools::displayError('The module HiPay Professional is not compatible with your PrestaShop');
+}
+require_once(dirname(__FILE__).'/classes/forms/HipayForm.php');
+require_once(dirname(__FILE__).'/classes/webservice/HipayUserAccount.php');
+require_once(dirname(__FILE__).'/classes/webservice/HipayLogs.php');
+require_once(dirname(__FILE__).'/classes/webservice/HipayREST.php');
+
