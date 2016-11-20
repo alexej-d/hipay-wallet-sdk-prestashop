@@ -290,7 +290,7 @@ class Hipay extends PaymentModule
 
         if ($isPay[0] && $isPay[1] && $isPay[2] && $isPay[3] && $isPay[4] && $isPay[5])
         {
-            $logo = $this->_path ."view/img/payment_button/EU.png";
+            $logo = $this->_path ."views/img/payment_button/EU.png";
             return array(
                 'cta_text' => $this->l('Hipay'),
                 'logo' => $logo,
